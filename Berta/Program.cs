@@ -4,9 +4,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using ICSharpCode.SharpZipLib.Zip;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Operation.Union;
 using SharpKml.Engine;
+
 
 namespace Berta
 {
@@ -14,54 +16,76 @@ namespace Berta
     {
         public static class Operaciones
         {
-            public static (ICollection<Geometry>, string) ObtenerListaPoligonosYnombre(List<Cobertura> Coberturas)
+            public static int CrearKML_KMZ(SharpKml.Dom.Document Doc, string NombreDoc, string carpeta, string Destino)
             {
-                List<Geometry> Cob = new List<Geometry>();
-                ICollection<Geometry> Fin;
-                string Nombre = "";
-                foreach (Cobertura C in Coberturas)
+                string path = Path.Combine(Path.Combine(@".\" + carpeta + "", NombreDoc + "_ALL.kml"));
+                string path_destino = Path.Combine(Path.Combine(Destino, NombreDoc + ".kmz"));
+
+                try
                 {
+                    //Guardar Documento dentro del KML y exportar
+                    var kml = new SharpKml.Dom.Kml();
+                    kml.Feature = Doc; //DOCUMENTO
+                                       //kml.Feature = placemark; //Se puede guardar directamente un placemark
+                    KmlFile kmlfile = KmlFile.Create(kml, true);
 
-                    Cob.Add(C.Area_Operaciones);
-                    Nombre = Nombre + "()" + C.nombre;
+                    //Eliminar archivo si existe (NO TIENE QUE EXISTIR, CATCH INTERNO)
+                    if (File.Exists(path))
+                    {
+                        // If file found, delete it    
+                        File.Delete(path);
+                    }
+
+                    using (var stream = File.OpenWrite(path)) //Path de salida
+                    {
+                        kmlfile.Save(stream);
+                    }
+
+                    
+                    //Eliminar archivo en destino 
+                    if (File.Exists(path_destino))
+                    {
+                        // If file found, delete it    
+                        File.Delete(path_destino);
+                    }
+
+                    //Crear KMZ
+                    //Crear el archivo (si quieres puedes editar uno existente cambiando el modo a Update.
+                    using (ZipArchive archive = System.IO.Compression.ZipFile.Open(path_destino, ZipArchiveMode.Create))
+                    {
+                        archive.CreateEntryFromFile(path, Path.GetFileName(path));
+                    }
+
+                    //Eliminar archivo temporal
+                    if (File.Exists(path))
+                    {
+                        // If file found, delete it    
+                        File.Delete(path);
+                    }
+
+                    return 0;
                 }
-                Fin = Cob;
-                return (Fin, Nombre);
-            } //A partir de una lista de coberturas retorna el nombre compuesto de todas y una lista (ICollection) de los poligonos/areas pertinentes 
-
-            public static (string, string) CrearKML(List<SharpKml.Dom.Document> Docs, string NombreDoc, string carpeta, string Destino)
-            {
-                string tipo = "ALL";
-
-                var Doc = new SharpKml.Dom.Document(); //se crea documento
-                Doc.Name = NombreDoc;
-                string path = Path.Combine(Path.Combine(@".\" + carpeta + "", NombreDoc + "_" + tipo + ".kml"));
-                string path_destino = Path.Combine(Path.Combine(Destino, NombreDoc + "_" + tipo + ".kmz"));
-                foreach (SharpKml.Dom.Document doc in Docs)
+                catch 
                 {
-                    Doc.AddFeature(doc); //añadir placermak dentro del documento
+                    //Eliminar archivo temporal
+                    if (File.Exists(path))
+                    {
+                        // If file found, delete it    
+                        File.Delete(path);
+                    }
+
+                    //Eliminar archivo en destino 
+                    if (File.Exists(path_destino))
+                    {
+                        // If file found, delete it    
+                        File.Delete(path_destino);
+                    }
+
+                    return -1;
                 }
+                
 
-                //Guardar Documento dentro del KML y exportar
-                var kml = new SharpKml.Dom.Kml();
-                kml.Feature = Doc; //DOCUMENTO
-                                   //kml.Feature = placemark; //Se puede guardar directamente un placemark
-                KmlFile kmlfile = KmlFile.Create(kml, true);
-
-                //Eliminar archivo si existe (NO TIENE QUE EXISTIR, CATCH INTERNO)
-                if (File.Exists(Path.Combine(Path.Combine(@".\" + carpeta + "", NombreDoc + "_" + tipo + ".kml"))))
-                {
-                    // If file found, delete it    
-                    File.Delete(Path.Combine(Path.Combine(@".\" + carpeta + "", NombreDoc + "_" + tipo + ".kml")));
-                }
-
-                using (var stream = File.OpenWrite(Path.Combine(@".\"+carpeta+"", NombreDoc + "_"+tipo+".kml"))) //Path de salida
-                {
-                    kmlfile.Save(stream);
-                }
-
-                return (path, path_destino);
-            } //A partir de un placemark creado creamos un KML nuevo y se guarda en carpeta asignada (temporales)
+            } //creamos un KML nuevo y se guarda en carpeta asignada (temporales). Después se crea un KMZ y se guarda en la carpeta asignada.
 
         }
 
@@ -398,7 +422,6 @@ namespace Berta
             public string FL;
             public string tipo;
             public int tipo_multiple=0; //De que grado de multicobertura se trata si es que es tipo "multiple"
-            public bool huecos = false; //Expilcita si hay huecos en la cobertura asociada
 
             public Geometry Area_Operaciones; //Cobertura-Huecos (Futura implementación)
 
@@ -498,154 +521,78 @@ namespace Berta
             {
                 string r;
                 if (tipo == "total")
-                    r = "Total";
+                    r = "Cobertura Total "+this.FL;
                 else if (tipo == "multiple total")
-                    r = "Múltiple total " + tipo_multiple;
-                else if (tipo == "multi")
-                    r = nombre + " múltiple " + tipo_multiple;
+                    r = string.Format("{0:00}", tipo_multiple) + " Total" ;
+                else if (tipo == "simple total")
+                    r = string.Format("{0:00}", 1) + " Total";
                 else
-                    r = nombre + " " + tipo;
-
-                //if ((nombre.Split(" () ").Count() == tipo_multiple) || (tipo == "total"))
-                //{
-                //    //Es un caso total 3, 5, 6. No necesitamos el nombre, solo tipo y nivel
-                //    if (tipo_multiple != 0)
-                //    {
-                //        if(tipo == "multiple total")
-                //            r = "multiple total " + tipo_multiple;
-                //        else 
-                //            r = nombre + " multiple " + tipo_multiple;
-                //    }
-                        
-                //    else
-                //        r = tipo;
-                //}
-                //else
-                //{
-                //    //Casos restantes 1, 2, 4
-                //    if (tipo_multiple != 0)
-                //        r = nombre + " multiple " + tipo_multiple;
-                //    else
-                //        r = nombre + " " + tipo;
-                //}
+                {
+                    //Reescriptura del nombre a nuevo formato propuesto por Enaire
+                    List<string> V = nombre.Split(" () ").ToList();
+                    V = V.OrderBy(x => x).ToList(); //Ordenar alfabeticamente
+                    nombre = string.Join('.', V);
+                    r = nombre;
+                }
+                    
 
                 return r;
-            }
+            } //Forma el nombre en el fromato deseado por Enaire
 
             private SharpKml.Dom.Style Estilo()
             {
                 SharpKml.Dom.Style style = new SharpKml.Dom.Style();
                 SharpKml.Dom.PolygonStyle pstyle = new SharpKml.Dom.PolygonStyle();
-                if (tipo == "total") //total simple
+                if ((tipo == "original")|| (tipo == "total")|| (tipo == "simple")|| (tipo == "simple total"))
                 {
-                    pstyle.Color = new SharpKml.Base.Color32(125, 255, 204, 0);
+                    //Color poligono
+                    pstyle.Color = new SharpKml.Base.Color32(125, 0, 255, 0);
                     style.Polygon = pstyle;
+
+                    //Color borde
+                    SharpKml.Dom.LineStyle lineStyle = new SharpKml.Dom.LineStyle();
+                    lineStyle.Color = new SharpKml.Base.Color32(127, 255, 255, 255);
+                    lineStyle.Width = 1;
+                    style.Line = lineStyle;
                 }
-                else if (tipo == "multiple total")
+                else
                 {
                     if (tipo_multiple == 2)
                     {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 255, 153, 102); //
+                        //Color poligono
+                        pstyle.Color = new SharpKml.Base.Color32(153, 0, 76, 152);
                         style.Polygon = pstyle;
+
+                        //Color borde
+                        SharpKml.Dom.LineStyle lineStyle = new SharpKml.Dom.LineStyle();
+                        lineStyle.Color = new SharpKml.Base.Color32(127, 255, 255, 255);
+                        lineStyle.Width = 1.5;
+                        style.Line = lineStyle;
                     }
                     else if (tipo_multiple == 3)
                     {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 255, 102, 153); //
+                        //Color poligono
+                        pstyle.Color = new SharpKml.Base.Color32(153, 127, 0, 255);
                         style.Polygon = pstyle;
+
+                        //Color borde
+                        SharpKml.Dom.LineStyle lineStyle = new SharpKml.Dom.LineStyle();
+                        lineStyle.Color = new SharpKml.Base.Color32(127, 255, 255, 255);
+                        lineStyle.Width = 1.5;
+                        style.Line = lineStyle;
                     }
-                    else if (tipo_multiple == 4)
+                    else 
                     {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 255, 0, 255); //
+                        //Color poligono
+                        pstyle.Color = new SharpKml.Base.Color32(178, 0, 85, 255);
                         style.Polygon = pstyle;
+
+                        //Color borde
+                        SharpKml.Dom.LineStyle lineStyle = new SharpKml.Dom.LineStyle();
+                        lineStyle.Color = new SharpKml.Base.Color32(178, 255, 255, 255);
+                        lineStyle.Width = 1.5;
+                        style.Line = lineStyle;
                     }
-                    else if (tipo_multiple == 5)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 102, 0, 255); //
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 6)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 0, 0, 255); //
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 7)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 0, 102, 255); //
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 8)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 0, 102, 204);
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 9)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 0, 255, 255);
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 10)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 51, 255, 153);
-                        style.Polygon = pstyle;
-                    }
-                }
-                else if (tipo == "multi")
-                { 
-                    if(tipo_multiple == 2)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 255, 153, 102); //
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 3)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 255, 102, 153); //
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 4)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 255, 0, 255); //
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 5)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 102, 0, 255); //
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 6)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 0, 0, 255); //
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 7)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 0, 102, 255); //
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 8)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 0, 102, 204);
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 9)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 0, 255, 255);
-                        style.Polygon = pstyle;
-                    }
-                    else if (tipo_multiple == 10)
-                    {
-                        pstyle.Color = new SharpKml.Base.Color32(125, 51, 255, 153);
-                        style.Polygon = pstyle;
-                    }
-                }
-                else if (tipo == "original")
-                {
-                    pstyle.Color = new SharpKml.Base.Color32(125, 0, 255, 0); //
-                    style.Polygon = pstyle;
-                }
-                else //Simple
-                {
-                    pstyle.Color = new SharpKml.Base.Color32(125, 255, 204, 0); //
-                    style.Polygon = pstyle;
                 }
 
                 return style;
@@ -947,9 +894,6 @@ namespace Berta
 
                     
                 }
-                else
-                {
-                }
 
                 nombre = nombre + "-" + tipo + "-" + FL;
                 var Doc = new SharpKml.Dom.Document(); //se crea documento
@@ -994,228 +938,345 @@ namespace Berta
                 GeometryOverlay.NG, // RH: use 'Next Gen' overlay generator
                 curInstance.CoordinateEqualityComparer);
 
-            try
+            int Control_M = -1;
+            while (Control_M != 0) //Menú principal
             {
-                //Obtener parámetros del usuario (Carpeta de lectura, carpeta de salida y FL)
-                Console.WriteLine("Cálcular multicoberturas - EXCAMUB");
-                Console.WriteLine();
-
-                //Entrada
-                Console.WriteLine("Directorio de entrada");
-                string Directorio_IN = Console.ReadLine();
-                Console.WriteLine();
-                DirectoryInfo DI = new DirectoryInfo(Directorio_IN); //Abrimos carpeta in para leer archivos
-
-                //Salida
-                Console.WriteLine("Directorio de salida");
-                string Directorio_OUT = Console.ReadLine();
-                Console.WriteLine();
-                DirectoryInfo DI_false = new DirectoryInfo(Directorio_IN); //Solo para comprobar que existe directorio de salida (no se usa)
-
-                //FL
-                bool FL_correcto = false;
-                string FL_IN = "Error";
-                while (!FL_correcto)
+                try
                 {
-                    Console.WriteLine("FL seleccionado (p.e.: FL100 / FL090):");
-                    FL_IN = Console.ReadLine();
-                    List<char> chars = new List<char>();
-                    foreach(char c in FL_IN)
-                    {
-                        chars.Add(c);
-                    }
-
-                    long N = 0; //Comprobar que el FL es correcto, solo si lo es el programa seguira
-                    if ((chars[0] == 'F') && (chars[1] == 'L') && (long.TryParse(chars[2].ToString(), out N)) && (long.TryParse(chars[3].ToString(), out N)) && (long.TryParse(chars[4].ToString(), out N)))
-                        FL_correcto = true;
-                    else
-                    {
-                        Console.WriteLine();
-                        Console.WriteLine("El FL indicado no es correcto");
-                    }
+                    Console.Clear();
+                    Console.WriteLine("EXCAMUB");
                     Console.WriteLine();
-                }
+                    Console.WriteLine("1 - Cálculo de multicoberturas");
+                    Console.WriteLine("2 - Filtrado SACTA");
+                    Console.WriteLine("3 - Cálculo de redundáncias");
+                    Console.WriteLine("4 - Cálculo de cobertura mínima");
+                    Console.WriteLine();
+                    Console.WriteLine("0 - Finalizar");
+                    Console.WriteLine();
+                    Console.WriteLine();
+                    Console.WriteLine("Introduzca identificador de operación (p.e. 1)");
+                    Control_M = Convert.ToInt32(Console.ReadLine()); //Actualizar valor Control_M
 
-                Console.WriteLine();
-
-                Console.WriteLine("Archivos cargados:");
-
-                List<Cobertura> Originales = new List<Cobertura>();
-                foreach (var file in DI.GetFiles())
-                {
-                    //Abrir KML
-                    ZipFile.ExtractToDirectory(file.FullName, @".\Temporal"); //extraer KML
-                    FileStream H;
-                    string FileName; string Nombre;
-                    string FL;
-                    if (File.Exists(Path.Combine(@".\Temporal", file.Name.Split(".")[0] + ".kml"))) 
+                    //Ifs de control
+                    if(Control_M == 1) //Cáclulo de multicobertura
                     {
-                        H = File.Open(Path.Combine(@".\Temporal", file.Name.Split(".")[0] + ".kml"), FileMode.Open); //Abrir KML  
-                        FileName = file.Name.Split(".")[0];
-                        Nombre = FileName;
-                        FL = file.Name.Split(".")[0].Split('-')[1];
-                    }
+                        List<SharpKml.Dom.Document> Docs = new List<SharpKml.Dom.Document>(); //Lista con archivos base kml para crear kmz final
 
-                    else
-                    {
-                        H = File.Open(Path.Combine(@".\Temporal", "doc.kml"), FileMode.Open); //Abrir KML generico 
-                        FileName = "doc";
-                        Nombre = file.Name.Split(".")[0];
-                        FL = file.Name.Split(".")[0].Split('-')[1];
-                    }
+                        //Variables de información al usuario
+                        string NombrePredeterminado = ""; //String para guardar un nombre de proyecto predeterminado
+                        string Directorio_IN = ""; //Directorio de entrada
+                        List<string> NombresCargados = new List<string>(); //Lista donde se guardan los nombres de los archivos cargados.
 
-                    KmlFile F = KmlFile.Load(H); //Cargar KML
-                    H.Close();
-                    //Eliminar archivo temporal
-                    if (File.Exists(Path.Combine(@".\Temporal", "" + FileName + ".kml")))
-                    {
-                        // If file found, delete it    
-                        File.Delete(Path.Combine(@".\Temporal", "" + FileName + ".kml"));
-                    }
-
-                    var polyGON = F.Root.Flatten().OfType<SharpKml.Dom.Polygon>().ToList(); //Extraer lista de poligonos del KML
-
-                    List<Geometry> Poligonos = new List<Geometry>(); //Lista donde se guardaran los poligonos
-
-                    //Implementación múltiples poligonos
-                    foreach (SharpKml.Dom.Polygon poly in polyGON)
-                    {
-                        SharpKml.Dom.CoordinateCollection Coordenadas = poly.OuterBoundary.LinearRing.Coordinates; //Extraer coordenadas del poligono SharpKml (solo coordenadas externas no huecos)
-                                                                                                                   
-                        List<SharpKml.Base.Vector> A = new List<SharpKml.Base.Vector>(); //Guardar coordenadas del poligono en una lista generica (paso necesario para poder extraer lat y long)
-                        foreach (var c in Coordenadas)
+                        bool parte1 = true; //Control de parte1
+                        try //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
                         {
-                            A.Add(c);
-                        }
-                        //Guardar coordenadas del poligono en un vector de coordenadas NetTopologySuite
-                        int max = Coordenadas.Count();
-                        Coordinate[] Coordenades = new Coordinate[max];
-                        int i = 0;
-                        while (i < max)
-                        {
-                            Coordenades[i] = new Coordinate(A[i].Longitude, A[i].Latitude);
-                            i++;
-                        }
-                        //Crear poligono NetTopologySuite
-                        var gf = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
-                        Geometry poly_T = gf.CreatePolygon(Coordenades); //Poligono a computar!
-
-                        //Implementación huecos
-                        List<Geometry> Huecos = new List<Geometry>(); //Guardar huecos existentes
-
-                        if (poly.InnerBoundary != null)
-                        {
-                            foreach (SharpKml.Dom.InnerBoundary IB in poly.InnerBoundary)
+                            //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
+                            //1.1 - FL
+                            bool FL_correcto = false;
+                            string FL_IN = "Error";
+                            while (!FL_correcto)
                             {
-                                SharpKml.Dom.CoordinateCollection Coordenadas_Hueco = IB.LinearRing.Coordinates;
-                                List<SharpKml.Base.Vector> B = new List<SharpKml.Base.Vector>();
+                                Console.Clear();
+                                Console.WriteLine("EXCAMUB");
+                                Console.WriteLine();
+                                Console.WriteLine("1 - Cálculo de multicoberturas");
+                                Console.WriteLine();
+                                Console.WriteLine("FL seleccionado (p.e.: FL100 / FL090):");
+                                FL_IN = Console.ReadLine();
+                                List<char> chars = new List<char>();
+                                foreach (char c in FL_IN)
+                                {
+                                    chars.Add(c);
+                                }
 
-                                //Guardar coordenadas del poligono en una lista generica (paso necesario para poder extraer lat y long)
-                                foreach (var c in Coordenadas_Hueco)
+                                long N = 0; //Comprobar que el FL es correcto, solo si lo es el programa seguira
+                                if ((chars[0] == 'F') && (chars[1] == 'L') && (long.TryParse(chars[2].ToString(), out N)) && (long.TryParse(chars[3].ToString(), out N)) && (long.TryParse(chars[4].ToString(), out N)))
+                                    FL_correcto = true;
+                                else
                                 {
-                                    B.Add(c);
+                                    Console.WriteLine();
+                                    Console.WriteLine("El FL indicado no es correcto");
                                 }
-                                //Guardar coordenadas del poligono en un vector de coordenadas NetTopologySuite
-                                int maxx = Coordenadas_Hueco.Count();
-                                Coordinate[] Coordenadess = new Coordinate[maxx];
-                                int ii = 0;
-                                while (ii < maxx)
-                                {
-                                    Coordenadess[ii] = new Coordinate(B[ii].Longitude, B[ii].Latitude);
-                                    ii++;
-                                }
-                                //Crear poligono NetTopologySuite
-                                var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
-                                Geometry poly_T_H = gff.CreatePolygon(Coordenadess); //Poligono a computar!
-                                poly_T = poly_T.Difference(poly_T_H); 
+                                Console.WriteLine();
                             }
+
+                            //1.2 - Entrada
+                            Console.WriteLine("Directorio de entrada");
+                            Directorio_IN = Console.ReadLine();
+                            Console.WriteLine();
+                            DirectoryInfo DI = new DirectoryInfo(Directorio_IN); //Abrimos carpeta in para leer archivos
+
+                            //1.3 - Cargar archivos
+                            Console.WriteLine("Archivos cargados:");
+
+                            List<Cobertura> Originales = new List<Cobertura>();
+                            foreach (var file in DI.GetFiles())
+                            {
+                                //Abrir KML
+                                System.IO.Compression.ZipFile.ExtractToDirectory(file.FullName, @".\Temporal"); //extraer KML
+                                FileStream H;
+                                string FileName; string Nombre;
+                                string FL;
+                                if (File.Exists(Path.Combine(@".\Temporal", file.Name.Split(".")[0] + ".kml")))
+                                {
+                                    H = File.Open(Path.Combine(@".\Temporal", file.Name.Split(".")[0] + ".kml"), FileMode.Open); //Abrir KML  
+                                    FileName = file.Name.Split(".")[0];
+                                    Nombre = FileName;
+                                    FL = file.Name.Split(".")[0].Split('-')[1];
+                                }
+
+                                else
+                                {
+                                    H = File.Open(Path.Combine(@".\Temporal", "doc.kml"), FileMode.Open); //Abrir KML generico 
+                                    FileName = "doc";
+                                    Nombre = file.Name.Split(".")[0];
+                                    FL = file.Name.Split(".")[0].Split('-')[1];
+                                }
+
+                                KmlFile F = KmlFile.Load(H); //Cargar KML
+                                H.Close();
+                                //Eliminar archivo temporal
+                                if (File.Exists(Path.Combine(@".\Temporal", "" + FileName + ".kml")))
+                                {
+                                    // If file found, delete it    
+                                    File.Delete(Path.Combine(@".\Temporal", "" + FileName + ".kml"));
+                                }
+
+                                var polyGON = F.Root.Flatten().OfType<SharpKml.Dom.Polygon>().ToList(); //Extraer lista de poligonos del KML
+
+                                List<Geometry> Poligonos = new List<Geometry>(); //Lista donde se guardaran los poligonos
+
+                                //Implementación múltiples poligonos
+                                foreach (SharpKml.Dom.Polygon poly in polyGON)
+                                {
+                                    SharpKml.Dom.CoordinateCollection Coordenadas = poly.OuterBoundary.LinearRing.Coordinates; //Extraer coordenadas del poligono SharpKml (solo coordenadas externas no huecos)
+
+                                    List<SharpKml.Base.Vector> A = new List<SharpKml.Base.Vector>(); //Guardar coordenadas del poligono en una lista generica (paso necesario para poder extraer lat y long)
+                                    foreach (var c in Coordenadas)
+                                    {
+                                        A.Add(c);
+                                    }
+                                    //Guardar coordenadas del poligono en un vector de coordenadas NetTopologySuite
+                                    int max = Coordenadas.Count();
+                                    Coordinate[] Coordenades = new Coordinate[max];
+                                    int i = 0;
+                                    while (i < max)
+                                    {
+                                        Coordenades[i] = new Coordinate(A[i].Longitude, A[i].Latitude);
+                                        i++;
+                                    }
+                                    //Crear poligono NetTopologySuite
+                                    var gf = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                                    Geometry poly_T = gf.CreatePolygon(Coordenades); //Poligono a computar!
+
+                                    //Implementación huecos
+                                    List<Geometry> Huecos = new List<Geometry>(); //Guardar huecos existentes
+
+                                    if (poly.InnerBoundary != null)
+                                    {
+                                        foreach (SharpKml.Dom.InnerBoundary IB in poly.InnerBoundary)
+                                        {
+                                            SharpKml.Dom.CoordinateCollection Coordenadas_Hueco = IB.LinearRing.Coordinates;
+                                            List<SharpKml.Base.Vector> B = new List<SharpKml.Base.Vector>();
+
+                                            //Guardar coordenadas del poligono en una lista generica (paso necesario para poder extraer lat y long)
+                                            foreach (var c in Coordenadas_Hueco)
+                                            {
+                                                B.Add(c);
+                                            }
+                                            //Guardar coordenadas del poligono en un vector de coordenadas NetTopologySuite
+                                            int maxx = Coordenadas_Hueco.Count();
+                                            Coordinate[] Coordenadess = new Coordinate[maxx];
+                                            int ii = 0;
+                                            while (ii < maxx)
+                                            {
+                                                Coordenadess[ii] = new Coordinate(B[ii].Longitude, B[ii].Latitude);
+                                                ii++;
+                                            }
+                                            //Crear poligono NetTopologySuite
+                                            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                                            Geometry poly_T_H = gff.CreatePolygon(Coordenadess); //Poligono a computar!
+                                            poly_T = poly_T.Difference(poly_T_H);
+                                        }
+                                    }
+
+                                    Poligonos.Add(poly_T); //Añadir poligono a la lista para generar cobertura
+                                }
+
+                                Originales.Add(new Cobertura(Nombre.Split('-')[0], FL, "original", Poligonos));
+
+                                Console.WriteLine(Nombre);
+                                NombresCargados.Add(Nombre);
+                            }
+
+                            //1.4 - Cálculos
+                            //Originales
+                            Conjunto conjunto = new Conjunto(Originales, "original", FL_IN);
+                            //List<SharpKml.Dom.Document> Docs_folder = new List<SharpKml.Dom.Document>() //
+                            foreach (Cobertura COB in conjunto.A_Operar)
+                            {
+                                Docs.Add(COB.CrearDocumentoSharpKML());
+                                //COB.CrearKML_Simple("Resultados");
+                            }
+
+                            //Cobertura total
+                            Cobertura CoberturaTotal = conjunto.FormarCoberturaTotal();
+                            Docs.Add(CoberturaTotal.CrearDocumentoSharpKML());
+
+                            //Coberturas multiples y multiples total
+                            (List<Conjunto> Con, Conjunto Mul, Cobertura Cob) = conjunto.FormarCoberturasMultiples();
+                            if (Cob != null)
+                                Docs.Add(Cob.CrearDocumentoSharpKML());
+                            foreach (Cobertura COB in Mul.A_Operar)
+                            {
+                                Docs.Add(COB.CrearDocumentoSharpKML());
+                            }
+                            foreach (Conjunto Conn in Con)
+                            {
+                                foreach (Cobertura COB in Conn.A_Operar)
+                                {
+                                    Docs.Add(COB.CrearDocumentoSharpKML());
+                                }
+                            }
+
+                            //Coberturas simples
+                            (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Mul, Cob);
+                            foreach (Cobertura COB in CoberturasSimples.A_Operar)
+                            {
+                                Docs.Add(COB.CrearDocumentoSharpKML());
+                            }
+
+                            Docs.Add(CoberturaSimpleTotal.CrearDocumentoSharpKML());
+
+                            NombrePredeterminado = conjunto.Nombre_Resultado + "-" + conjunto.FL;
+
+                            //Fin de la parte1
                         }
+                        catch(Exception e)
+                        {
+                            Console.WriteLine(e.Message);
+                            Console.ReadLine();
+                            parte1 = false; //Informar de que la parte1 no se ha ejecutado correctamente
+                        } //Parte1 - Cargar ficheros de entrada, FL y ejecutar cálculos
 
-                        Poligonos.Add(poly_T); //Añadir poligono a la lista para generar cobertura
-                    }
+                        if(parte1) //Si y solo si la parte1 ha sido ejecutada con éxito ejecutamos la parte2
+                        {
+                            //Parte2 - Guardar fichero en carpeta salida, obtener nombre de proyecto
 
-                    Originales.Add(new Cobertura(Nombre.Split('-')[0], FL, "original", Poligonos));
+                            //Informar al usuario
+                            Console.Clear();
+                            Console.WriteLine("EXCAMUB");
+                            Console.WriteLine();
+                            Console.WriteLine("1 - Cálculo de multicoberturas");
+                            Console.WriteLine();
+                            Console.WriteLine("Directorio de entrada: " + Directorio_IN);
+                            Console.WriteLine();
+                            Console.WriteLine("Archivos cargados:");
+                            Console.WriteLine();
+                            foreach (string N in NombresCargados)
+                                Console.WriteLine(N);
+                            Console.WriteLine();
+                            Console.WriteLine();
 
-                    //if (poly.InnerBoundary == null)
-                        
-                    //else
-                    //    Originales.Add(new Cobertura(Nombre.Split('-')[0], FL, "original", poly_T, Huecos));
+                            //2.1 - Nombre de proyecto
+                            Console.WriteLine("Introduzca nombre del proyecto (si no introduce ninguno se creara uno por defecto):");
+                            string NombreProyecto = Console.ReadLine();
+                            if (NombreProyecto == "") //Nombre por defecto
+                            {
+                                NombreProyecto = NombrePredeterminado;
+                            }
 
-                    Console.WriteLine(Nombre);
+                            //2.2 - Crear documento para exportar
+                            var Doc = new SharpKml.Dom.Document(); //se crea documento
+                            Doc.Name = NombreProyecto;
+
+                            foreach (SharpKml.Dom.Document doc in Docs)
+                            {
+                                Doc.AddFeature(doc); //añadir placermak dentro del documento
+                            }
+
+                            int Control_CM_Parte2 = -1;
+                            while (Control_CM_Parte2 != 0)
+                            {
+                                //Informar al usuario
+                                Console.Clear();
+                                Console.WriteLine("EXCAMUB");
+                                Console.WriteLine();
+                                Console.WriteLine("1 - Cálculo de multicoberturas");
+                                Console.WriteLine();
+                                Console.WriteLine("Directorio de entrada: " + Directorio_IN);
+                                Console.WriteLine();
+                                Console.WriteLine("Archivos cargados:");
+                                Console.WriteLine();
+                                foreach (string N in NombresCargados)
+                                    Console.WriteLine(N);
+                                Console.WriteLine();
+                                Console.WriteLine("Nombre del proyecto: " + NombreProyecto);
+                                Console.WriteLine();
+                                Console.WriteLine();
+
+                                //2.3 - Directorio de salida
+                                Console.WriteLine("Directorio de salida");
+                                string Directorio_OUT = Console.ReadLine();
+                                Console.WriteLine();
+
+                                //2.4 - Exportar proyecto
+                                int Control = Operaciones.CrearKML_KMZ(Doc, NombreProyecto, "Temporal", Directorio_OUT); //Se crea un kml temporal para después crear KMZ
+                                if (Control == 0)
+                                {
+                                    Console.WriteLine("Exportado con exito!");
+                                    Console.WriteLine();
+                                    Console.WriteLine("Nombre del archivo: " + NombreProyecto + ".kmz");
+                                    Console.ReadLine();
+                                    Control_CM_Parte2 = 0; //Finalizar bucle
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Directorio de destino no válido");
+                                    Console.WriteLine();
+                                    Console.WriteLine("Enter para continuar");
+                                    Console.ReadLine();
+                                }
+                            }
+
+                        } //Parte2 - Guardar fichero en carpeta salida, obtener nombre de proyecto
+
+                    }//Cáclulo de multicobertura
                 }
-
-                List<SharpKml.Dom.Document> Docs = new List<SharpKml.Dom.Document>();
-
-                //Forzar Huecos
-                //Operaciones.CrearKMZconHuecos(Originales[5], Originales[1]);
-                //Operaciones.CrearKMZconHuecos(Originales[4], Originales[0]);
-                //Operaciones.CrearKMZconHuecos(Originales[3], Originales[2]);
-
-                //Originales
-                Conjunto conjunto = new Conjunto(Originales, "original",FL_IN);
-                foreach (Cobertura COB in conjunto.A_Operar)
+                catch (FormatException e) //Detectar errores sobre el Control_M
                 {
-                    Docs.Add(COB.CrearDocumentoSharpKML());
-                    //COB.CrearKML_Simple("Resultados");
+                    Console.WriteLine(e.Message);
+                    Console.WriteLine();
+                    Console.WriteLine("Enter para continuar");
+                    Console.ReadLine();
+                    Control_M = -1; //Sigue el buclce
                 }
-
-                //Cobertura total
-                Cobertura CoberturaTotal = conjunto.FormarCoberturaTotal();
-                Docs.Add(CoberturaTotal.CrearDocumentoSharpKML());
-
-                //Coberturas multiples y multiples total
-                (List<Conjunto> Con, Conjunto Mul, Cobertura Cob) = conjunto.FormarCoberturasMultiples();
-                if(Cob != null)
-                    Docs.Add(Cob.CrearDocumentoSharpKML());
-                foreach (Cobertura COB in Mul.A_Operar)
-                {
-                    Docs.Add(COB.CrearDocumentoSharpKML());
-                }
-                foreach (Conjunto Conn in Con)
-                {
-                    foreach (Cobertura COB in Conn.A_Operar)
-                    {
-                        Docs.Add(COB.CrearDocumentoSharpKML());
-                    }
-                }
-
-                //Coberturas simples
-                (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Mul, Cob);
-                foreach (Cobertura COB in CoberturasSimples.A_Operar)
-                {
-                    Docs.Add(COB.CrearDocumentoSharpKML());
-                }
-
-                Docs.Add(CoberturaSimpleTotal.CrearDocumentoSharpKML());
-                //CoberturaMultipleTotal.CrearKML_Simple("Resultados");
-
-                //Formar KML Multilayer
-                (string path, string path_d) = Operaciones.CrearKML(Docs, conjunto.Nombre_Resultado + "-" + conjunto.FL, "Temporal", Directorio_OUT);
-
-                //Eliminar archivo en destino 
-                if (File.Exists(path_d))
-                {
-                    // If file found, delete it    
-                    File.Delete(path_d);
-                }
-
-                //Crear KMZ
-                using (ZipArchive archive = ZipFile.Open(path_d, ZipArchiveMode.Create))
-                {
-                    archive.CreateEntryFromFile(path, conjunto.Nombre_Resultado + "-" + conjunto.FL);
-                }
-
-                ////Eliminar archivo temporal
-                //if (File.Exists(path))
-                //{
-                //    // If file found, delete it    
-                //    File.Delete(path);
-                //}
             }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.Message);
-            }
+
+          
+          
+            
+
+            //Salida
+            
+
+            
+
+            Console.WriteLine();
+
+            
+
+            
+
+            //Forzar Huecos
+            //Operaciones.CrearKMZconHuecos(Originales[5], Originales[1]);
+            //Operaciones.CrearKMZconHuecos(Originales[4], Originales[0]);
+            //Operaciones.CrearKMZconHuecos(Originales[3], Originales[2]);
+
+            
+            //CoberturaMultipleTotal.CrearKML_Simple("Resultados");
+
+            
         }
     }
 }
