@@ -1,17 +1,21 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using ICSharpCode.SharpZipLib.Zip;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Operation.Union;
+using NetTopologySuite.Precision;
 using SharpKml.Engine;
 
 
 namespace Berta
 {
+    using Point = Tuple<double, double>;
+
     class Program
     {
         public static class Operaciones
@@ -41,7 +45,7 @@ namespace Berta
                         kmlfile.Save(stream);
                     }
 
-                    
+
                     //Eliminar archivo en destino 
                     if (File.Exists(path_destino))
                     {
@@ -65,7 +69,7 @@ namespace Berta
 
                     return 0;
                 }
-                catch 
+                catch
                 {
                     //Eliminar archivo temporal
                     if (File.Exists(path))
@@ -83,10 +87,180 @@ namespace Berta
 
                     return -1;
                 }
-                
+
 
             } //creamos un KML nuevo y se guarda en carpeta asignada (temporales). Después se crea un KMZ y se guarda en la carpeta asignada.
 
+            private static double PerpendicularDistance(Point pt, Point lineStart, Point lineEnd)
+            {
+                double dx = lineEnd.Item1 - lineStart.Item1;
+                double dy = lineEnd.Item2 - lineStart.Item2;
+
+                // Normalize
+                double mag = Math.Sqrt(dx * dx + dy * dy);
+                if (mag > 0.0)
+                {
+                    dx /= mag;
+                    dy /= mag;
+                }
+                double pvx = pt.Item1 - lineStart.Item1;
+                double pvy = pt.Item2 - lineStart.Item2;
+
+                // Get dot product (project pv onto normalized direction)
+                double pvdot = dx * pvx + dy * pvy;
+
+                // Scale line direction vector and subtract it from pv
+                double ax = pvx - pvdot * dx;
+                double ay = pvy - pvdot * dy;
+
+                return Math.Sqrt(ax * ax + ay * ay);
+            } //Método 1 de Ramer-Douglas-Peucker line simplification
+
+            private static void RamerDouglasPeucker(List<Point> pointList, double epsilon, List<Point> output)
+            {
+                if (pointList.Count < 2)
+                {
+                    throw new ArgumentOutOfRangeException("Not enough points to simplify");
+                }
+
+                // Find the point with the maximum distance from line between the start and end
+                double dmax = 0.0;
+                int index = 0;
+                int end = pointList.Count - 1;
+                for (int i = 1; i < end; ++i)
+                {
+                    double d = PerpendicularDistance(pointList[i], pointList[0], pointList[end]);
+                    if (d > dmax)
+                    {
+                        index = i;
+                        dmax = d;
+                    }
+                }
+
+                // If max distance is greater than epsilon, recursively simplify
+                if (dmax > epsilon)
+                {
+                    List<Point> recResults1 = new List<Point>();
+                    List<Point> recResults2 = new List<Point>();
+                    List<Point> firstLine = pointList.Take(index + 1).ToList();
+                    List<Point> lastLine = pointList.Skip(index).ToList();
+                    RamerDouglasPeucker(firstLine, epsilon, recResults1);
+                    RamerDouglasPeucker(lastLine, epsilon, recResults2);
+
+                    // build the result list
+                    output.AddRange(recResults1.Take(recResults1.Count - 1));
+                    output.AddRange(recResults2);
+                    if (output.Count < 2) throw new Exception("Problem assembling output");
+                }
+                else
+                {
+                    // Just return start and end points
+                    output.Clear();
+                    output.Add(pointList[0]);
+                    output.Add(pointList[pointList.Count - 1]);
+                }
+            } //Método 2 de Ramer-Douglas-Peucker line simplification
+
+            public static Geometry AplicarRamerDouglasPeucker(Coordinate[] C, double Epsilon)
+            {
+
+                //Solo si el area es superior a 0.1 consideramos válido el poligono. 
+                //Eliminamos líneas erroneas dentro del propio poligono. 
+
+                //Transformamos puntos NetTopology en Puntos RamerDouglas
+                List<Coordinate> CoordenadasIn = C.ToList();
+                List<Point> PuntosIn = new List<Point>();
+
+                foreach (Coordinate coordenada in CoordenadasIn)
+                {
+                    PuntosIn.Add(new Point(coordenada.X, coordenada.Y));
+                }
+
+                //Aplicar algoritmo RamerDouglasPeucker
+                List<Point> PuntosOut = new List<Point>();
+                RamerDouglasPeucker(PuntosIn, Epsilon, PuntosOut);
+
+                //Transformamos puntos en coordenadas NetTopology
+                List<Coordinate> CoordenadasOut = new List<Coordinate>();
+                foreach (Point punto in PuntosOut)
+                {
+                    CoordenadasOut.Add(new Coordinate(punto.Item1, punto.Item2));
+                }
+
+                //Creamos nuevo poligono y lo añadimos a la lista
+                var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //generador de poligonos
+                Polygon polyOut = gff.CreatePolygon(CoordenadasOut.ToArray());
+
+                return polyOut;
+            } //Aplica el algoritmo RamerDouglasPeucker
+
+            public static Geometry AplicarRamerDouglasPeucker_Multi(MultiPolygon In, double Epsilon)
+            {
+                //if(In.GetType().ToString() == "NetTopologySuite.Geometries.Polygon")
+                //{
+                //    //Poligono simple
+                //}
+                //else
+                //{
+                //    //Multipoligono
+                //    var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                //    MultiPolygon Multi = gff.CreateMultiPolygon(In.)
+                //}
+
+                var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //generador de poligonos
+                List<Geometry> PoligonosIn = In.Geometries.ToList(); //Extraer poligonos de la lista
+                List<Polygon> PoligonosOut = new List<Polygon>(); //Lista donde se guardaran los poligonos tratados
+
+                foreach(Polygon Poly in PoligonosIn)
+                {
+                    if(Poly.Area>0.1)
+                    {
+                        //Solo si el area es superior a 0.1 consideramos válido el poligono. 
+                        //Eliminamos líneas erroneas dentro del propio poligono. 
+
+                        //Transformamos puntos NetTopology en Puntos RamerDouglas
+                        List<Coordinate> CoordenadasIn = Poly.Coordinates.ToList();
+                        List<Point> PuntosIn = new List<Point>();
+
+                        foreach (Coordinate coordenada in CoordenadasIn)
+                        {
+                            PuntosIn.Add(new Point(coordenada.X, coordenada.Y));
+                        }
+
+                        //Aplicar algoritmo RamerDouglasPeucker
+                        List<Point> PuntosOut = new List<Point>();
+                        RamerDouglasPeucker(PuntosIn, Epsilon, PuntosOut);
+
+                        //Transformamos puntos en coordenadas NetTopology
+                        List<Coordinate> CoordenadasOut = new List<Coordinate>();
+                        foreach (Point punto in PuntosOut)
+                        {
+                            CoordenadasOut.Add(new Coordinate(punto.Item1, punto.Item2));
+                        }
+
+                        //Creamos nuevo poligono y lo añadimos a la lista
+
+                        Polygon polyOut = gff.CreatePolygon(CoordenadasIn.ToArray());
+                        //Polygon polyOut = gff.CreatePolygon(Poly.Coordinates);
+                        PoligonosOut.Add(polyOut);
+                    }
+                }
+
+                //Creamos nuevo multipoligono
+                MultiPolygon MultiOut = gff.CreateMultiPolygon(PoligonosOut.ToArray());
+
+                return MultiOut;
+
+            } //Aplica el algoritmo RamerDouglasPeucker y filtra los posibles datos erroneos de multipoligonos
+
+            public static Geometry ReducirPrecision(Geometry geom)
+            {
+                var pm = new PrecisionModel(10000);
+
+                var reducedGeom = GeometryPrecisionReducer.Reduce(geom,pm);
+
+                return reducedGeom;
+            }
         }
 
         public class Conjunto
@@ -97,6 +271,9 @@ namespace Berta
             public string Nombre_Resultado; //Nombre del resultado (dependiendo de la ultima operación ejecutada)
             ICollection<Geometry> Areas = new List<Geometry>(); //Areas de coberturas (privado)
             List<string> Nombres = new List<string>();
+
+            //TEST
+            List<string> Combinaciones = new List<string>();
             public Conjunto()
             { }
 
@@ -105,29 +282,36 @@ namespace Berta
                 A_Operar = Coberturas;
                 Identificador = ID;
                 FL = Fl;
+                EjecutarConstrucción();
+            }// Extrae de las coberturas entradas las areas para poder trabajar con ellas, genera nombre (inicalmente en null)
+
+            public void EjecutarConstrucción()
+            {
                 int i = 1;
-                string N = Coberturas[0].nombre.Split('-')[0];
+                string N = A_Operar[0].nombre.Split('-')[0];
                 List<string> NN = new List<string>();
                 NN.Add(N);
-                Areas.Add(Coberturas[0].Area_Operaciones);
+                Areas.Add(A_Operar[0].Area_Operaciones);
 
-                while (i<Coberturas.Count())
+                while (i < A_Operar.Count())
                 {
-                    Areas.Add(Coberturas[i].Area_Operaciones);
-                    NN.Add(Coberturas[i].nombre);
-                    N = N + " () " + Coberturas[i].nombre.Split('-')[0];
+                    Areas.Add(A_Operar[i].Area_Operaciones);
+                    NN.Add(A_Operar[i].nombre);
+                    N = N + " () " + A_Operar[i].nombre.Split('-')[0];
                     i++;
                 }
                 Nombre_Resultado = N;
                 Nombres = NN;
-            }// Extrae de las coberturas entradas las areas para poder trabajar con ellas, genera nombre (inicalmente en null)
+            }
 
             private IEnumerable<IEnumerable<T>> Permutaciones<T>(IEnumerable<T> items, int count)
             {
+                //Count = numero de elementos que se quieren en la combinación
+
                 int i = 0;
                 foreach (var item in items)
                 {
-                    if (count == 1)
+                    if (count == 1) //Si solo se quiere un elemento retornamos el item en cada paso
                         yield return new T[] { item };
                     else
                     {
@@ -137,7 +321,44 @@ namespace Berta
 
                     ++i;
                 }
-            }//Permutar nombres
+            }//Permutar nombres, retorna 
+
+            public void FiltrarCombinaciones()
+            {
+                int MultipleMax = A_Operar.Count; //El número de radares determina la cobertura múltiple máxima possible
+                while (MultipleMax > 1)
+                {
+                    IEnumerable<IEnumerable<string>> GenCombinaciones = Permutaciones(Nombres, MultipleMax);
+                    foreach (IEnumerable<string> Combinacion in GenCombinaciones)
+                    {
+                        IEnumerable<IEnumerable<string>> GenCombinaciones_2 = Permutaciones(Combinacion, 2);
+
+                        bool Intersecciona = true;
+                        foreach (IEnumerable<string> Combinacion_2 in GenCombinaciones_2)
+                        {
+                            int IndexOfLast = A_Operar.IndexOf(A_Operar.Where(x => x.nombre == Combinacion_2.Last()).ToList()[0]);
+                            int ValorInt = A_Operar.Where(x => x.nombre == Combinacion_2.First()).ToList()[0].InterseccionesLista[IndexOfLast];
+                            if (ValorInt == 0) //El par no intersecciona por lo que no hay posibilidad de intersección real. 
+                            {
+                                Intersecciona = false;
+                                break;
+                            }
+
+                        }
+                        if (Intersecciona == true)
+                            Combinaciones.Add(string.Join(" () ", Combinacion));
+                    }
+                    MultipleMax--;
+                }
+            }
+
+            public void GenerarListasIntersecciones()
+            {
+                foreach (Cobertura cobertura in this.A_Operar)
+                {
+                    cobertura.GenerarListaIntersectados(this.A_Operar);
+                }
+            }
 
             //Metodos geometricos
             public Geometry Union()
@@ -153,10 +374,10 @@ namespace Berta
                 List<Geometry> N_Areas = Areas.ToList();
                 var GEO = N_Areas[0].Intersection(N_Areas[1]);
 
-                if(N_Areas.Count>2)
+                if (N_Areas.Count > 2)
                 {
                     int i = 2;
-                    while(i< N_Areas.Count)
+                    while (i < N_Areas.Count)
                     {
                         GEO = GEO.Intersection(N_Areas[i]);
                         i++;
@@ -175,9 +396,9 @@ namespace Berta
 
             public Cobertura FormarCoberturaTotal()
             {
-                if (Areas.Count ==0)
+                if (Areas.Count == 0)
                 {
-                    foreach(Cobertura c in A_Operar)
+                    foreach (Cobertura c in A_Operar)
                         Areas.Add(c.Area_Operaciones);
                 }
 
@@ -189,50 +410,57 @@ namespace Berta
 
             private List<Conjunto> FormarCoberturasMultiples_Paso1() //Conjuntos por lvl
             {
-                //Generamos todas las multicoberturas des de lvl Max a 2
-                int MultipleMax = A_Operar.Count; //El número de radares determina la cobertura múltiple máxima possible
-
                 List<Conjunto> Conjuntos = new List<Conjunto>(); //Guardaremos los conjuntos (por nivel) de multicoberturas
 
-                while(MultipleMax>1)
+                foreach (string combinacion in Combinaciones)
                 {
-                    var Multi = Permutaciones(Nombres, MultipleMax); //Generar permutaciones de nombres para así conocer las combinaciones necesarias
-                    List<Cobertura> Coberturas = new List<Cobertura>(); //Lista de resultados
+                    List<string> PermutaList = combinacion.Split(" () ").ToList();
+                    int MultipleMax = PermutaList.Count();
 
-                    foreach (var Permuta in Multi)
+                    List<Cobertura> Operables = A_Operar.Where(x => PermutaList.Contains(x.nombre)).ToList();//Lista para guardar las coberturas indicadas por la permutación
+
+                    //Cáclulo de intersección (REC/BUSC) for por intentar mejorar el rendimiento
+                    Geometry BASE = Operables[0].Area_Operaciones;
+                    int Count = Operables.Count;
+                    for (int i = 1; i < Count; i++)
                     {
-                        List<Geometry> Operables = new List<Geometry>();//Lista para guardar las coberturas indicadas por la permutación
-
-                        foreach (var Radar in Permuta) //Buscamos cada cobertura 
-                        {
-                            Operables.Add(A_Operar.Where(x => x.nombre.Split('-')[0] == Radar).ToList()[0].Area_Operaciones);
-                        }
-                        string N_Completo = String.Join(" () ", Permuta); //Nombre completo de la combianción
-                        var BASE = Operables.First(); //Elegimos una cobertura que será nuestra base para calcular la intersección
-
-                        int i = 1;
-                        while (i < Operables.Count) //Ejecutamos intersección de la combinación
-                        {
-                            BASE = BASE.Intersection(Operables[i]);
-                            i++;
-                        }
-
-                        if (BASE.IsEmpty == false) //Si el resultado no es nulo (No interseccionan por lo que el resultado es nulo) creamos nueva cobertura y añadimos al conjunto
-                        {
-                            Coberturas.Add(new Cobertura(N_Completo, this.FL, "multi", MultipleMax, BASE));
-                        }
-
+                        BASE = BASE.Intersection(Operables[i].Area_Operaciones);
+                        if (BASE.IsEmpty)
+                            break;
                     }
-                    if(Coberturas.Count != 0) //Tenemos intersección, guardamos el resultado. En caso contrario no guardamos nada (si el count es 0 significa que no se ha guardado ninguna cobertura
-                        Conjuntos.Add(new Conjunto(Coberturas, "multi " + MultipleMax, this.FL));                               // por lo que no existe intersección)
 
-                    MultipleMax--;
+                    //Buscar conjunto de coberturas del mismo nivel, si no existe crearlo
+                    if (BASE.IsEmpty == false)
+                    {
+                        //Si el resultado no es nulo (No interseccionan por lo que el resultado es nulo) creamos nueva cobertura y añadimos al conjunto
+                        Cobertura A_Guardar = new Cobertura(combinacion, this.FL, "multi", MultipleMax, BASE);
+
+                        //if(Conjuntos.Count !=0)
+                        //{
+                        //Buscar conjunto (indice de)
+                        List<Conjunto> Extraido = Conjuntos.Where(x => x.Identificador == "multi " + MultipleMax).ToList();
+                        if (Extraido.Count != 0)
+                        {
+                            Conjuntos[Conjuntos.IndexOf(Extraido[0])].A_Operar.Add(A_Guardar);
+                            //Conjuntos[Conjuntos.IndexOf(Extraido[0])].EjecutarConstrucción();
+                        }
+                        else
+                        {
+                            //Inicializar un nuevo conjunto
+                            Conjunto A_Guardar_Conjunto = new Conjunto();
+                            A_Guardar_Conjunto.FL = this.FL;
+                            A_Guardar_Conjunto.Identificador = "multi " + MultipleMax;
+                            A_Guardar_Conjunto.A_Operar.Add(A_Guardar);
+                            //A_Guardar_Conjunto.EjecutarConstrucción();
+                            Conjuntos.Add(A_Guardar_Conjunto);
+                        }
+                    }
                 }
 
-                return Conjuntos; 
+                return Conjuntos;
             }
 
-            private (Cobertura,bool) FormarCoberturasMultiples_Paso2(List<Conjunto> CoberturasPorLvl) //Calcular cobertura máxima
+            private (Cobertura, bool) FormarCoberturasMultiples_Paso2(List<Conjunto> CoberturasPorLvl) //Calcular cobertura máxima
             {
                 int MultipleMax = this.A_Operar.Count; //El número de radares determina la cobertura múltiple máxima possible
 
@@ -242,14 +470,14 @@ namespace Berta
                 if (CoberturasPorLvl.First().A_Operar.First().tipo_multiple == MultipleMax)
                 {
                     MAX = CoberturasPorLvl.First().A_Operar.First();
-                    MAX.nombre = "(MAX)";
+                    //MAX.nombre = "(MAX)";
                     CobMax = true;
                 }
 
                 if (CobMax)
-                    return (MAX,true);
+                    return (MAX, true);
                 else
-                    return (null,false);
+                    return (null, false);
             }
 
             private (Conjunto, List<Conjunto>) FormarCoberturasMultiples_Paso3(List<Conjunto> CoberturasPorLvl, bool CoberturaMAX) //Cálcula anillos de coberturas del mismo lvl
@@ -259,7 +487,7 @@ namespace Berta
 
                 if (CoberturaMAX) //Hay cobertura max
                 {
-                    var GEO_Resta = CoberturasPorLvl.First().A_Operar.First().Area_Operaciones; //Area que restaremos a todas las múlticoberturas para así mostrar correctamente el resultado
+                    var GEO_Resta = Operaciones.ReducirPrecision(CoberturasPorLvl.First().A_Operar.First().Area_Operaciones); //Area que restaremos a todas las múlticoberturas para así mostrar correctamente el resultado
 
                     int j = 1; //El primero no se calcula (MAX)
                     while (j < CoberturasPorLvl.Count)
@@ -267,14 +495,52 @@ namespace Berta
                         foreach (Cobertura Cob in CoberturasPorLvl[j].A_Operar)
                         {
                             //Restar
-                            var NewGeo = Cob.Area_Operaciones.Difference(GEO_Resta);
+                            var CobRound = Operaciones.ReducirPrecision(Cob.Area_Operaciones);
+                            var NewGeo = Operaciones.ReducirPrecision(CobRound.Difference(GEO_Resta));
                             Cob.ActualizarAreas(NewGeo); //Actualizar
                         }
                         CoberturasPorLvl[j].A_Operar.RemoveAll(x => x.Area_Operaciones.IsEmpty == true);
 
-                        var UnionLvl = CoberturasPorLvl[j].FormarCoberturaTotal();
-                        TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl[j].A_Operar[0].tipo_multiple, UnionLvl.Area_Operaciones.Difference(GEO_Resta)));
-                        GEO_Resta = GEO_Resta.Union(UnionLvl.Area_Operaciones);
+                        foreach (Cobertura Cob in CoberturasPorLvl[j].A_Operar)
+                        {
+                            //Restar
+                            var NewGeo = Operaciones.ReducirPrecision(Cob.Area_Operaciones.Difference(GEO_Resta));
+                            //NewGeo = Operaciones.EliminarFormasExtrañas(NewGeo);
+                            if (NewGeo.Area < 0.001) //Eliminar geometrias sospechosas
+                            {
+                                var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                                NewGeo = gff.CreateEmpty(Dimension.Curve);
+                            }
+                            else if (NewGeo.GetType().ToString()!= "NetTopologySuite.Geometries.Polygon")
+                            {
+                                MultiPolygon Verificar = (MultiPolygon)NewGeo;
+                                var Poligonos = Verificar.Geometries;
+                                List<Polygon> Verificados = new List<Polygon>();
+                                var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                                foreach (Polygon Poly in Poligonos)
+                                {
+                                    Geometry NewGeoS = Poly;
+                                    if (Poly.Area<0.0001)
+                                    {
+                                        NewGeoS = gff.CreateEmpty(Dimension.Curve);
+                                    }
+                                    Verificados.Add((Polygon)NewGeoS);
+                                }
+                                Verificados.RemoveAll(x => x.IsEmpty == true);
+
+                                NewGeo = gff.CreateMultiPolygon(Verificados.ToArray());
+                            }
+                            //else if (NewGeo.GetType().ToString() == "NetTopologySuite.Geometries.Polygon") //Algoritmo AplicarRamerDouglasPeucker
+                            //    NewGeo = Operaciones.AplicarRamerDouglasPeucker(NewGeo.Coordinates, 0.001);
+                            //else
+                            //    NewGeo = Operaciones.AplicarRamerDouglasPeucker_Multi((MultiPolygon)NewGeo, 0.001);
+                            Cob.ActualizarAreas(NewGeo); //Actualizar
+                        }
+
+
+                        var UnionLvl = Operaciones.ReducirPrecision(CoberturasPorLvl[j].FormarCoberturaTotal().Area_Operaciones);
+                        TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl[j].A_Operar[0].tipo_multiple, Operaciones.ReducirPrecision(UnionLvl.Difference(GEO_Resta))));
+                        GEO_Resta = Operaciones.ReducirPrecision(GEO_Resta.Union(UnionLvl));
                         TotalPorLVL.RemoveAll(x => x.Area_Operaciones.IsEmpty == true);//Eliminamos coberturas vacias
 
                         j++;
@@ -283,35 +549,58 @@ namespace Berta
                 else //No hay cobertura max
                 {
                     //Formar Geo_Resta, para hacer la diferencia sobre las otras capas
-                    Cobertura GEO_Resta = CoberturasPorLvl.First().FormarCoberturaTotal();
-                    TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl.First().A_Operar.First().tipo_multiple, GEO_Resta.Area_Operaciones)); //Guardamos el primer anillo 
+                    Geometry GEO_Resta = Operaciones.ReducirPrecision(CoberturasPorLvl.First().FormarCoberturaTotal().Area_Operaciones);
+                    TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl.First().A_Operar.First().tipo_multiple, GEO_Resta)); //Guardamos el primer anillo 
 
                     //Geo_Resta inicialmente es la unión de todas las coberturas de lvl máximo (que no cobertura de lvl máximo, ya que en este caso no existe)
                     //Ahora unimos cada anillo y ejecutamos la resta para obtener el resultado correcto
                     int j = 1;
-                    while(j< CoberturasPorLvl.Count)
+                    while (j < CoberturasPorLvl.Count)
                     {
-                        var NewG = CoberturasPorLvl[j].FormarCoberturaTotal(); //Ejecutamos unión de conjunto
-                        var Resta = NewG.Area_Operaciones.Difference(GEO_Resta.Area_Operaciones); //Hacemos la diferencia 
+                        var NewG = CoberturasPorLvl[j].FormarCoberturaTotal().Area_Operaciones; //Ejecutamos unión de conjunto
+                        var Resta = NewG.Difference(GEO_Resta); //Hacemos la diferencia 
 
                         TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl[j].A_Operar[0].tipo_multiple, Resta)); //Guardamos anillo resultante
 
                         foreach (Cobertura Cob in CoberturasPorLvl[j].A_Operar)
                         {
                             //Restar
-                            var NewGeo = Cob.Area_Operaciones.Difference(GEO_Resta.Area_Operaciones);
-                            if(NewGeo.Coordinates.Count()<11) //Si una geometria tiene menos de 10 puntos la consideramos como empty.
+                            var CobRound = Operaciones.ReducirPrecision(Cob.Area_Operaciones);
+                            var NewGeo = Operaciones.ReducirPrecision(CobRound.Difference(GEO_Resta));
+                            //NewGeo = Operaciones.EliminarFormasExtrañas(NewGeo);
+                            if (NewGeo.Area < 0.001) //Eliminar geometrias sospechosas
                             {
                                 var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                                 NewGeo = gff.CreateEmpty(Dimension.Curve);
                             }
+                            else if (NewGeo.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
+                            {
+                                //Eliminar geometrias sospechosas de un multipoligono
+                                MultiPolygon Verificar = (MultiPolygon)NewGeo;
+                                var Poligonos = Verificar.Geometries;
+                                List<Polygon> Verificados = new List<Polygon>();
+                                var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                                foreach (Polygon Poly in Poligonos)
+                                {
+                                    if (Poly.Area > 0.0001)
+                                    {
+                                        Verificados.Add(Poly);
+                                    }
+                                }
+                                Verificados.RemoveAll(x => x.IsEmpty == true);
+
+                                NewGeo = gff.CreateMultiPolygon(Verificados.ToArray());
+                            }
+                            //else if (NewGeo.GetType().ToString() == "NetTopologySuite.Geometries.Polygon") //Algoritmo AplicarRamerDouglasPeucker
+                            //    NewGeo = Operaciones.AplicarRamerDouglasPeucker(NewGeo.Coordinates, 0.01);
+                            //else
+                            //    NewGeo = Operaciones.AplicarRamerDouglasPeucker_Multi((MultiPolygon)NewGeo, 0.01);dxvfghgvb
                             Cob.ActualizarAreas(NewGeo); //Actualizar
                         }
 
-                        GEO_Resta.ActualizarAreas(NewG.Area_Operaciones.Union(GEO_Resta.Area_Operaciones)); //Actualizamos area de resta (GEO_resta)
+                        GEO_Resta = NewG.Union(GEO_Resta); //Actualizamos area de resta (GEO_resta)
 
                         CoberturasPorLvl[j].A_Operar.RemoveAll(x => x.Area_Operaciones.IsEmpty == true);//Eliminamos coberturas vacias
-                        TotalPorLVL.RemoveAll(x => x.Area_Operaciones.IsEmpty == true); //Eliminamos coberturas vacias (si las hay)
 
                         j++;
                     }
@@ -341,7 +630,7 @@ namespace Berta
 
             public (Conjunto, Cobertura, Cobertura) FormarCoberturasSimples(Conjunto TotalPorLvl, Cobertura Max)
             {
-                
+
                 Cobertura InterseccionTotal = new Cobertura();
                 InterseccionTotal.FL = this.FL;
                 InterseccionTotal.nombre = "multiple";
@@ -351,19 +640,19 @@ namespace Berta
                 if (Max != null) //Caso con cobertura máxima existente
                 {
                     //Primero unimos todas las intersecciones para asi crear la cobertura de intersección total 
-                    var GEOt = Max.Area_Operaciones;
+                    var GEOt = Operaciones.ReducirPrecision(Max.Area_Operaciones);
                     foreach (Cobertura cob in TotalPorLvl.A_Operar)
-                        GEOt = GEOt.Union(cob.Area_Operaciones);
+                        GEOt = Operaciones.ReducirPrecision(GEOt.Union(cob.Area_Operaciones));
                     InterseccionTotal.ActualizarAreas(GEOt);
                 }
                 else //Caso donde cobertura máxima no existe
                 {
                     //Primero unimos todas las intersecciones para asi crear la cobertura de intersección total 
-                    var GEOt = TotalPorLvl.A_Operar.First().Area_Operaciones;
-                    int j = 1; 
-                    while(j<TotalPorLvl.A_Operar.Count)
+                    var GEOt = Operaciones.ReducirPrecision(TotalPorLvl.A_Operar.First().Area_Operaciones);
+                    int j = 1;
+                    while (j < TotalPorLvl.A_Operar.Count)
                     {
-                        GEOt = GEOt.Union(TotalPorLvl.A_Operar[j].Area_Operaciones);
+                        GEOt = Operaciones.ReducirPrecision(GEOt.Union(TotalPorLvl.A_Operar[j].Area_Operaciones));
                         j++;
                     }
                     InterseccionTotal.ActualizarAreas(GEOt);
@@ -377,11 +666,37 @@ namespace Berta
 
                 foreach (Cobertura COB in A_Operar)
                 {
-                    var GEO = COB.Area_Operaciones.Difference(InterseccionTotal.Area_Operaciones);
+                    var GEO = Operaciones.ReducirPrecision(COB.Area_Operaciones.Difference(InterseccionTotal.Area_Operaciones));
+
+                    if (GEO.Area < 0.001) //Eliminar geometrias sospechosas
+                    {
+                        var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                        GEO = gff.CreateEmpty(Dimension.Curve);
+                    }
+                    else if (GEO.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
+                    {
+                        //Eliminar geometrias sospechosas de un multipoligono
+                        MultiPolygon Verificar = (MultiPolygon)GEO;
+                        var Poligonos = Verificar.Geometries;
+                        List<Polygon> Verificados = new List<Polygon>();
+                        var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                        foreach (Polygon Poly in Poligonos)
+                        {
+                            if (Poly.Area > 0.0001)
+                            {
+                                Verificados.Add(Poly);
+                            }
+                        }
+                        Verificados.RemoveAll(x => x.IsEmpty == true);
+
+                        GEO = gff.CreateMultiPolygon(Verificados.ToArray());
+                    }
+
                     Ret.Add(new Cobertura(COB.nombre, this.FL, "simple", GEO));
                 }
 
                 Conjunto Simples = new Conjunto(Ret, "Coberturas simples", this.FL);
+                Simples.A_Operar.RemoveAll(x => x.Area_Operaciones.IsEmpty == true);//Eliminamos coberturas vacias
                 return (Simples, InterseccionTotal, SimplesTotal);
 
             } //coberturas simples (por cada radar y el conjunto de ellas) y intersección total (union de todo eso que no es múltiple)
@@ -418,12 +733,15 @@ namespace Berta
              * 
              * El nombre a exportar se guardara en la variable Nombre_exp, solo usada en el momento de crear el KML
              */
-            public string nombre; 
+            public string nombre;
             public string FL;
             public string tipo;
-            public int tipo_multiple=0; //De que grado de multicobertura se trata si es que es tipo "multiple"
+            public int tipo_multiple = 0; //De que grado de multicobertura se trata si es que es tipo "multiple"
 
             public Geometry Area_Operaciones; //Cobertura-Huecos (Futura implementación)
+            public Point Centroide;
+
+            public List<int> InterseccionesLista = new List<int>();
 
             //public string nombre_Archivo;
 
@@ -447,7 +765,7 @@ namespace Berta
                 FL = Fl;
                 tipo = Tipo;
 
-                if(Poligono.Count ==1) //Si en la lista de poligonos solo hay uno lo guardamos directamente
+                if (Poligono.Count == 1) //Si en la lista de poligonos solo hay uno lo guardamos directamente
                     Area_Operaciones = Poligono.First();
                 else //Si hay más de uno ejecutamos la union
                 {
@@ -512,6 +830,24 @@ namespace Berta
             } //generar original con huecos
 
             //Metodos
+
+            public void GenerarListaIntersectados(List<Cobertura> A_Operar)
+            {
+                //Guardaremos en una lista las intersecciones de la cobertura con un conjunto. 1 Intersecta, 0 No intersecta, -1 Misma cobertura
+                //Esta en orden de indices del A_Operar del conjuntoMadre (orden de carga)
+                foreach (Cobertura cobertura in A_Operar)
+                {
+                    Geometry G = cobertura.Area_Operaciones;
+                    if (this.Area_Operaciones.EqualsExact(G, 0.1))
+                        InterseccionesLista.Add(-1);
+                    else if (this.Area_Operaciones.Intersects(G) == true)
+                        InterseccionesLista.Add(1);
+                    else
+                        InterseccionesLista.Add(0);
+                }
+            }
+
+
             public void ActualizarAreas(Geometry New)
             {
                 Area_Operaciones = New;
@@ -521,9 +857,9 @@ namespace Berta
             {
                 string r;
                 if (tipo == "total")
-                    r = "Cobertura Total "+this.FL;
+                    r = "Cobertura Total " + this.FL;
                 else if (tipo == "multiple total")
-                    r = string.Format("{0:00}", tipo_multiple) + " Total" ;
+                    r = string.Format("{0:00}", tipo_multiple) + " Total";
                 else if (tipo == "simple total")
                     r = string.Format("{0:00}", 1) + " Total";
                 else
@@ -534,7 +870,7 @@ namespace Berta
                     nombre = string.Join('.', V);
                     r = nombre;
                 }
-                    
+
 
                 return r;
             } //Forma el nombre en el fromato deseado por Enaire
@@ -543,7 +879,7 @@ namespace Berta
             {
                 SharpKml.Dom.Style style = new SharpKml.Dom.Style();
                 SharpKml.Dom.PolygonStyle pstyle = new SharpKml.Dom.PolygonStyle();
-                if ((tipo == "original")|| (tipo == "total")|| (tipo == "simple")|| (tipo == "simple total"))
+                if ((tipo == "original") || (tipo == "total") || (tipo == "simple") || (tipo == "simple total"))
                 {
                     //Color poligono
                     pstyle.Color = new SharpKml.Base.Color32(125, 0, 255, 0);
@@ -581,7 +917,7 @@ namespace Berta
                         lineStyle.Width = 1.5;
                         style.Line = lineStyle;
                     }
-                    else 
+                    else
                     {
                         //Color poligono
                         pstyle.Color = new SharpKml.Base.Color32(178, 0, 85, 255);
@@ -746,8 +1082,10 @@ namespace Berta
                 Doc.Name = Nombre_exp();
                 foreach (SharpKml.Dom.Placemark placemark in lista)
                 {
+                    placemark.Visibility = false;
                     Doc.AddFeature(placemark); //añadir placermak dentro del documento
                 }
+                Doc.Visibility = false;
 
                 return Doc;
             } //Traduce de NetTopologySuite a SharpKML y guarda la infromación asociada en un Documento SharkKML (NO KML)
@@ -766,7 +1104,7 @@ namespace Berta
                         SharpKml.Dom.Polygon polygon = new SharpKml.Dom.Polygon(); //se crea poligono
                         //Bucle inner
                         var Intr = ((Polygon)Area_Operaciones).InteriorRings;
-                        foreach(LineString Forat in Intr)
+                        foreach (LineString Forat in Intr)
                         {
                             int x = 0;
                             int Maxx = Forat.Coordinates.Length;
@@ -824,7 +1162,7 @@ namespace Berta
                 }
                 else if (Area_Operaciones.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
                 {
-                    foreach(Geometry GEO in ((MultiPolygon)Area_Operaciones).Geometries)
+                    foreach (Geometry GEO in ((MultiPolygon)Area_Operaciones).Geometries)
                     {
                         var Extr = ((Polygon)GEO).ExteriorRing.Coordinates;
                         if (((Polygon)GEO).InteriorRings.Length != 0)
@@ -832,7 +1170,7 @@ namespace Berta
                             //CASO CON HUECOS!!
                             SharpKml.Dom.Polygon polygon = new SharpKml.Dom.Polygon(); //se crea poligono
                                                                                        //Bucle inner
-                            //int con = 1;
+                                                                                       //int con = 1;
                             var Intr = ((Polygon)GEO).InteriorRings;
                             foreach (LineString Forat in Intr)
                             {
@@ -862,8 +1200,8 @@ namespace Berta
                             }
                             polygon.OuterBoundary = outerBoundary; //se importan dentro del poligono las coordenadas SOLO DEL POLYGONO EXTERIOR!
                             SharpKml.Dom.Placemark placemark = new SharpKml.Dom.Placemark(); //se crea placemark
-                            if(tipo_multiple!=0) //nombre de la area
-                                placemark.Name = tipo; 
+                            if (tipo_multiple != 0) //nombre de la area
+                                placemark.Name = tipo;
                             placemark.Geometry = polygon; //añadir geometria al placemark
 
                             lista.Add(placemark);
@@ -892,7 +1230,7 @@ namespace Berta
                         }
                     }
 
-                    
+
                 }
 
                 nombre = nombre + "-" + tipo + "-" + FL;
@@ -910,7 +1248,7 @@ namespace Berta
                 KmlFile kmlfile = KmlFile.Create(kml, true);
 
                 //Eliminar archivo temporal
-                if (File.Exists(Path.Combine(Path.Combine(@".\" + carpeta + "", nombre +".kmz"))))
+                if (File.Exists(Path.Combine(Path.Combine(@".\" + carpeta + "", nombre + ".kmz"))))
                 {
                     // If file found, delete it    
                     File.Delete(Path.Combine(Path.Combine(@".\" + carpeta + "", nombre + ".kmz")));
@@ -921,7 +1259,7 @@ namespace Berta
                     kmlfile.Save(stream);
                 }
 
-                return "exportado a "+Path.Combine(@".\" + carpeta + "", nombre + "_" + tipo + ".kmz")+"";
+                return "exportado a " + Path.Combine(@".\" + carpeta + "", nombre + "_" + tipo + ".kmz") + "";
             } //Crea un KML SOLO con la cobertura asociada. No KML_Compuesto (multiples capas con, coberturas originales, simples, multiples i la total)
         }
 
@@ -941,7 +1279,7 @@ namespace Berta
             int Control_M = -1;
             while (Control_M != 0) //Menú principal
             {
-                try
+                //try
                 {
                     Console.Clear();
                     Console.WriteLine("EXCAMUB");
@@ -958,17 +1296,19 @@ namespace Berta
                     Control_M = Convert.ToInt32(Console.ReadLine()); //Actualizar valor Control_M
 
                     //Ifs de control
-                    if(Control_M == 1) //Cáclulo de multicobertura
+                    if (Control_M == 1) //Cáclulo de multicobertura
                     {
-                        List<SharpKml.Dom.Document> Docs = new List<SharpKml.Dom.Document>(); //Lista con archivos base kml para crear kmz final
+                        List<SharpKml.Dom.Folder> Folders = new List<SharpKml.Dom.Folder>(); //Lista con archivos base kml para crear kmz final
+                        SharpKml.Dom.Document KML_Cobertura_total = new SharpKml.Dom.Document(); //Archivo a traspasar de sector
 
                         //Variables de información al usuario
                         string NombrePredeterminado = ""; //String para guardar un nombre de proyecto predeterminado
                         string Directorio_IN = ""; //Directorio de entrada
                         List<string> NombresCargados = new List<string>(); //Lista donde se guardan los nombres de los archivos cargados.
+                        TimeSpan TiempoEjecución = new TimeSpan(); //Variable para guardar el tiempo de ejecución. 
 
                         bool parte1 = true; //Control de parte1
-                        try //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
+                        //try //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
                         {
                             //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
                             //1.1 - FL
@@ -1103,6 +1443,8 @@ namespace Berta
                                     Poligonos.Add(poly_T); //Añadir poligono a la lista para generar cobertura
                                 }
 
+
+
                                 Originales.Add(new Cobertura(Nombre.Split('-')[0], FL, "original", Poligonos));
 
                                 Console.WriteLine(Nombre);
@@ -1110,56 +1452,96 @@ namespace Berta
                             }
 
                             //1.4 - Cálculos
-                            //Originales
+                            //Originales (crear carpeta)
                             Conjunto conjunto = new Conjunto(Originales, "original", FL_IN);
-                            //List<SharpKml.Dom.Document> Docs_folder = new List<SharpKml.Dom.Document>() //
+
+                            //Flitrar permutaciones 
+                            conjunto.GenerarListasIntersecciones();
+                            Stopwatch stopwatch = Stopwatch.StartNew(); //Reloj para conocer el tiempo de ejecución
+                            conjunto.FiltrarCombinaciones();
+
+                            var folder_BASE = new SharpKml.Dom.Folder { Id = "Coberturas-Base", Name = "Coberturas Base " + FL_IN, }; //Creamos carpeta donde guardaremos todos los documentos relacionados
+                            folder_BASE.Visibility = false;
+
                             foreach (Cobertura COB in conjunto.A_Operar)
                             {
-                                Docs.Add(COB.CrearDocumentoSharpKML());
-                                //COB.CrearKML_Simple("Resultados");
+                                folder_BASE.AddFeature(COB.CrearDocumentoSharpKML());
                             }
 
-                            //Cobertura total
+                            Folders.Add(folder_BASE);
+
+                            //Cobertura total (Documento)
                             Cobertura CoberturaTotal = conjunto.FormarCoberturaTotal();
-                            Docs.Add(CoberturaTotal.CrearDocumentoSharpKML());
+                            KML_Cobertura_total = CoberturaTotal.CrearDocumentoSharpKML(); //Documento KML de la cobertura total
 
                             //Coberturas multiples y multiples total
-                            (List<Conjunto> Con, Conjunto Mul, Cobertura Cob) = conjunto.FormarCoberturasMultiples();
-                            if (Cob != null)
-                                Docs.Add(Cob.CrearDocumentoSharpKML());
-                            foreach (Cobertura COB in Mul.A_Operar)
-                            {
-                                Docs.Add(COB.CrearDocumentoSharpKML());
-                            }
-                            foreach (Conjunto Conn in Con)
-                            {
-                                foreach (Cobertura COB in Conn.A_Operar)
-                                {
-                                    Docs.Add(COB.CrearDocumentoSharpKML());
-                                }
-                            }
+                            (List<Conjunto> Listado_ConjuntoCoberturasMultiples, Conjunto Anillos, Cobertura CoberturaMaxima) = conjunto.FormarCoberturasMultiples(); //Cálculo coberturas múltiples
 
                             //Coberturas simples
-                            (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Mul, Cob);
+                            (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Anillos, CoberturaMaxima); //Cálculo coberturas simples
+
+                            //Añadir coberturas simples (crear carpeta)
+                            var folder_Simples = new SharpKml.Dom.Folder();
+                            folder_Simples.Visibility = false;
+                            folder_Simples.Name = "Multi-Cobertura " + string.Format("{0:00}", 1) + " " + FL_IN;
+                            folder_Simples.Id = "Multi-Cobertura-" + string.Format("{0:00}", 1);
+                            folder_Simples.AddFeature(CoberturaSimpleTotal.CrearDocumentoSharpKML());
                             foreach (Cobertura COB in CoberturasSimples.A_Operar)
                             {
-                                Docs.Add(COB.CrearDocumentoSharpKML());
+                                folder_Simples.AddFeature(COB.CrearDocumentoSharpKML());
+                            }
+                            Folders.Add(folder_Simples);
+
+                            //Añadimos coberturas múltiples y anillos (crear carpeta)
+                            foreach (Conjunto con in Listado_ConjuntoCoberturasMultiples)
+                            {
+                                int Lvl = Convert.ToInt32(con.Identificador.Split(" ")[1]);
+                                var folder_lvl = new SharpKml.Dom.Folder();
+                                folder_lvl.Visibility = false;
+                                folder_lvl.Name = "Multi-Cobertura " + string.Format("{0:00}", Lvl) + " " + FL_IN;
+                                folder_lvl.Id = "Multi-Cobertura-" + string.Format("{0:00}", Lvl);
+
+                                //Buscar anillo correspondiente al lvl 
+                                var anillo = Anillos.A_Operar.Where(x => x.tipo_multiple == Lvl).ToList()[0];
+                                folder_lvl.AddFeature(anillo.CrearDocumentoSharpKML());
+
+                                //Añadir multicoberturas
+                                foreach (Cobertura cob in con.A_Operar)
+                                    folder_lvl.AddFeature(cob.CrearDocumentoSharpKML());
+
+                                Folders.Add(folder_lvl);
                             }
 
-                            Docs.Add(CoberturaSimpleTotal.CrearDocumentoSharpKML());
+                            //Añadimos cobertura máxima si es que existe (crear carpeta)
+                            if (CoberturaMaxima != null)
+                            {
+                                var folder_MAX = new SharpKml.Dom.Folder();
+                                folder_MAX.Visibility = false;
+                                int Lvl = CoberturaMaxima.tipo_multiple;
+                                folder_MAX.Name = "Multi-Cobertura " + string.Format("{0:00}", Lvl) + " " + FL_IN;
+                                folder_MAX.Id = "Multi-Cobertura-" + string.Format("{0:00}", Lvl);
+                                folder_MAX.AddFeature(CoberturaMaxima.CrearDocumentoSharpKML());
 
-                            NombrePredeterminado = conjunto.Nombre_Resultado + "-" + conjunto.FL;
+                                Folders.Add(folder_MAX);
+                            }
 
+                            if (NombresCargados.Count < 20)
+                                NombrePredeterminado = String.Join('.', NombresCargados);
+                            else
+                                NombrePredeterminado = NombresCargados[0] + "." + NombresCargados.Last() + " (entre otros)";
+
+                            stopwatch.Stop();
+                            TiempoEjecución = new TimeSpan(stopwatch.ElapsedTicks);
                             //Fin de la parte1
                         }
-                        catch(Exception e)
-                        {
-                            Console.WriteLine(e.Message);
-                            Console.ReadLine();
-                            parte1 = false; //Informar de que la parte1 no se ha ejecutado correctamente
-                        } //Parte1 - Cargar ficheros de entrada, FL y ejecutar cálculos
+                        //catch (Exception e)
+                        //{
+                        //    Console.WriteLine(e.Message);
+                        //    Console.ReadLine();
+                        //    parte1 = false; //Informar de que la parte1 no se ha ejecutado correctamente
+                        //} //Parte1 - Cargar ficheros de entrada, FL y ejecutar cálculos
 
-                        if(parte1) //Si y solo si la parte1 ha sido ejecutada con éxito ejecutamos la parte2
+                        if (parte1) //Si y solo si la parte1 ha sido ejecutada con éxito ejecutamos la parte2
                         {
                             //Parte2 - Guardar fichero en carpeta salida, obtener nombre de proyecto
 
@@ -1176,6 +1558,7 @@ namespace Berta
                             foreach (string N in NombresCargados)
                                 Console.WriteLine(N);
                             Console.WriteLine();
+                            Console.WriteLine("Tiempo de ejecución: " + TiempoEjecución.TotalSeconds);
                             Console.WriteLine();
 
                             //2.1 - Nombre de proyecto
@@ -1190,9 +1573,13 @@ namespace Berta
                             var Doc = new SharpKml.Dom.Document(); //se crea documento
                             Doc.Name = NombreProyecto;
 
-                            foreach (SharpKml.Dom.Document doc in Docs)
+                            //Ordenar carpetas tal y como enaire lo quiere
+                            Folders= Folders.OrderBy(x=>x.Name).ToList();
+
+                            Doc.AddFeature(KML_Cobertura_total); //Añadimos cobertura total
+                            foreach (SharpKml.Dom.Folder fold in Folders)
                             {
-                                Doc.AddFeature(doc); //añadir placermak dentro del documento
+                                Doc.AddFeature(fold); //añadir placermak dentro del documento
                             }
 
                             int Control_CM_Parte2 = -1;
@@ -1210,6 +1597,8 @@ namespace Berta
                                 Console.WriteLine();
                                 foreach (string N in NombresCargados)
                                     Console.WriteLine(N);
+                                Console.WriteLine();
+                                Console.WriteLine("Tiempo de ejecución: " + TiempoEjecución.TotalSeconds);
                                 Console.WriteLine();
                                 Console.WriteLine("Nombre del proyecto: " + NombreProyecto);
                                 Console.WriteLine();
@@ -1240,43 +1629,18 @@ namespace Berta
                             }
 
                         } //Parte2 - Guardar fichero en carpeta salida, obtener nombre de proyecto
-
                     }//Cáclulo de multicobertura
+                    else if (Control_M == 5) { }
                 }
-                catch (FormatException e) //Detectar errores sobre el Control_M
-                {
-                    Console.WriteLine(e.Message);
-                    Console.WriteLine();
-                    Console.WriteLine("Enter para continuar");
-                    Console.ReadLine();
-                    Control_M = -1; //Sigue el buclce
-                }
+                //catch (FormatException e) //Detectar errores sobre el Control_M
+                //{
+                //    Console.WriteLine(e.Message);
+                //    Console.WriteLine();
+                //    Console.WriteLine("Enter para continuar");
+                //    Console.ReadLine();
+                //    Control_M = -1; //Sigue el buclce
+                //}
             }
-
-          
-          
-            
-
-            //Salida
-            
-
-            
-
-            Console.WriteLine();
-
-            
-
-            
-
-            //Forzar Huecos
-            //Operaciones.CrearKMZconHuecos(Originales[5], Originales[1]);
-            //Operaciones.CrearKMZconHuecos(Originales[4], Originales[0]);
-            //Operaciones.CrearKMZconHuecos(Originales[3], Originales[2]);
-
-            
-            //CoberturaMultipleTotal.CrearKML_Simple("Resultados");
-
-            
         }
     }
 }
