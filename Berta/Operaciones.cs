@@ -19,7 +19,7 @@ namespace Berta
     {
         public static int CrearKML_KMZ(SharpKml.Dom.Document Doc, string NombreDoc, string carpeta, string Destino)
         {
-            string path = Path.Combine(Path.Combine(@".\" + carpeta + "", NombreDoc + "_ALL.kml"));
+            string path = Path.Combine(Path.Combine(@".\" + carpeta + "", NombreDoc + ".kml"));
             string path_destino = Path.Combine(Path.Combine(Destino, NombreDoc + ".kmz"));
 
             try
