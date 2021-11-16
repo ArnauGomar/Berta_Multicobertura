@@ -251,11 +251,11 @@ namespace Berta
             return style;
         } //Definir formato de capa
 
-        /// <summary>
+        /// <summary>                   
         /// Traduce de coordenadas NetTopologySuite a coordenadas SharpKML y guarda la infromación asociada en un Documento SharkKML (NO KML)
         /// </summary>
         /// <returns></returns>
-        public SharpKml.Dom.Document CrearDocumentoSharpKML()
+        public SharpKml.Dom.Document CrearDocumentoSharpKML()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
         {
             List<SharpKml.Dom.Placemark> lista = new List<SharpKml.Dom.Placemark>();
 
@@ -458,7 +458,9 @@ namespace Berta
                     }
                     polygon.OuterBoundary = outerBoundary; //se importan dentro del poligono las coordenadas SOLO DEL POLYGONO EXTERIOR!
                     SharpKml.Dom.Placemark placemark = new SharpKml.Dom.Placemark(); //se crea placemark
-                    placemark.Name = tipo; //nombre de la area
+                    placemark.Name = Nombre_exp(); //generamos nuevo nombre Enaire
+                    placemark.Geometry = polygon; //añadir geometria al placemark
+                    placemark.AddStyle(Estilo()); //Creamos estilo pertinente
                     placemark.Geometry = polygon; //añadir geometria al placemark
 
                     lista.Add(placemark);
@@ -480,8 +482,11 @@ namespace Berta
                     }
                     polygon.OuterBoundary = outerBoundary; //se importan dentro del poligono las coordenadas SOLO DEL POLYGONO EXTERIOR!
                     SharpKml.Dom.Placemark placemark = new SharpKml.Dom.Placemark(); //se crea placemark
-                    placemark.Name = tipo; //nombre de la area
+                    placemark.Name = Nombre_exp(); //generamos nuevo nombre Enaire
                     placemark.Geometry = polygon; //añadir geometria al placemark
+                    placemark.AddStyle(Estilo()); //Creamos estilo pertinente
+                    placemark.Geometry = polygon; //añadir geometria al placemark
+
 
                     lista.Add(placemark);
                 }
@@ -526,9 +531,10 @@ namespace Berta
                         }
                         polygon.OuterBoundary = outerBoundary; //se importan dentro del poligono las coordenadas SOLO DEL POLYGONO EXTERIOR!
                         SharpKml.Dom.Placemark placemark = new SharpKml.Dom.Placemark(); //se crea placemark
-                        if (tipo_multiple != 0) //nombre de la area
-                            placemark.Name = tipo;
                         placemark.Geometry = polygon; //añadir geometria al placemark
+                        placemark.Name = Nombre_exp(); //generamos nuevo nombre Enaire
+                        placemark.Geometry = polygon; //añadir geometria al placemark
+                        placemark.AddStyle(Estilo()); //Creamos estilo pertinente
 
                         lista.Add(placemark);
                     }
@@ -549,8 +555,9 @@ namespace Berta
                         }
                         polygon.OuterBoundary = outerBoundary; //se importan dentro del poligono las coordenadas SOLO DEL POLYGONO EXTERIOR!
                         SharpKml.Dom.Placemark placemark = new SharpKml.Dom.Placemark(); //se crea placemark
-                        placemark.Name = nombre; //nombre de la area
+                        placemark.Name = Nombre_exp(); //generamos nuevo nombre Enaire
                         placemark.Geometry = polygon; //añadir geometria al placemark
+                        placemark.AddStyle(Estilo()); //Creamos estilo pertinente
 
                         lista.Add(placemark);
                     }
@@ -559,7 +566,7 @@ namespace Berta
 
             }
 
-            nombre = nombre + "-" + tipo + "-" + FL;
+            nombre = Nombre_exp()+"-"+this.FL;
             var Doc = new SharpKml.Dom.Document(); //se crea documento
             Doc.Name = nombre; //nombre documento
             foreach (SharpKml.Dom.Placemark placemark in lista)
@@ -579,8 +586,8 @@ namespace Berta
                 // If file found, delete it    
                 File.Delete(Path.Combine(Path.Combine(@".\" + carpeta + "", nombre + ".kmz")));
             }
-
-            using (var stream = File.OpenWrite(Path.Combine(@".\" + carpeta + "", nombre + ".kmz"))) //Path de salida
+            string p = Path.Combine(carpeta, nombre + ".kmz");
+            using (var stream = File.OpenWrite(p)) //Path de salida
             {
                 kmlfile.Save(stream);
             }

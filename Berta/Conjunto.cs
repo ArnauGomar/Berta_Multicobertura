@@ -284,7 +284,7 @@ namespace Berta
                 return (null, false);
         }
 
-        private (Conjunto, List<Conjunto>) FormarCoberturasMultiples_Paso3(List<Conjunto> CoberturasPorLvl, bool CoberturaMAX) //Cálcula anillos de coberturas del mismo lvl
+        private (Conjunto, List<Conjunto>) FormarCoberturasMultiples_Paso3(List<Conjunto> CoberturasPorLvl, bool CoberturaMAX, double epsilon) //Cálcula anillos de coberturas del mismo lvl
         {
             //Dos casos, hay multiple máx o no. Si la hay se ejecuta como en version Alpha
             List<Cobertura> TotalPorLVL = new List<Cobertura>(); //Lista para guardar la unión por lvl de multicobertura (anillos)
@@ -310,7 +310,7 @@ namespace Berta
                         //Restar
                         var NewGeo = Operaciones.ReducirPrecision(Cob.Area_Operaciones.Difference(GEO_Resta));
                         //NewGeo = Operaciones.EliminarFormasExtrañas(NewGeo);
-                        if (NewGeo.Area < 0.00001) //Eliminar geometrias sospechosas
+                        if (NewGeo.Area < epsilon) //Eliminar geometrias sospechosas
                         {
                             var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                             NewGeo = gff.CreateEmpty(Dimension.Curve);
@@ -323,7 +323,7 @@ namespace Berta
                             var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                             foreach (Polygon Poly in Poligonos)
                             {
-                                if (Poly.Area > 0.00001)
+                                if (Poly.Area > epsilon)
                                 {
                                     Verificados.Add(Poly);
                                 }
@@ -370,7 +370,7 @@ namespace Berta
                         var CobRound = Operaciones.ReducirPrecision(Cob.Area_Operaciones);
                         var NewGeo = Operaciones.ReducirPrecision(CobRound.Difference(GEO_Resta));
                         //NewGeo = Operaciones.EliminarFormasExtrañas(NewGeo);
-                        if (NewGeo.Area < 0.00001) //Eliminar geometrias sospechosas
+                        if (NewGeo.Area < epsilon) //Eliminar geometrias sospechosas
                         {
                             var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                             NewGeo = gff.CreateEmpty(Dimension.Curve);
@@ -384,7 +384,7 @@ namespace Berta
                             var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                             foreach (Polygon Poly in Poligonos)
                             {
-                                if (Poly.Area > 0.00001) //TST 0.0001
+                                if (Poly.Area > epsilon) //TST 0.00001
                                 {
                                     Verificados.Add(Poly);
                                 }
@@ -421,13 +421,13 @@ namespace Berta
 
         }
 
-        public (List<Conjunto>, Conjunto, Cobertura) FormarCoberturasMultiples()
+        public (List<Conjunto>, Conjunto, Cobertura) FormarCoberturasMultiples(double epsilon)
         {
             List<Conjunto> ConjuntosPorLvl = FormarCoberturasMultiples_Paso1(); //Ejecutar paso 1 
 
             (Cobertura CoberturaMaxima, bool existeMax) = FormarCoberturasMultiples_Paso2(ConjuntosPorLvl); //Ejecutar paso 2
 
-            (Conjunto Anillos, List<Conjunto> ConjuntosPorLvl_F) = FormarCoberturasMultiples_Paso3(ConjuntosPorLvl, existeMax);
+            (Conjunto Anillos, List<Conjunto> ConjuntosPorLvl_F) = FormarCoberturasMultiples_Paso3(ConjuntosPorLvl, existeMax, epsilon);
 
             if (existeMax)
             {
@@ -438,7 +438,7 @@ namespace Berta
                 return (ConjuntosPorLvl_F, Anillos, null); //Retornamos null la cobertura máxima
         }
 
-        public (Conjunto, Cobertura, Cobertura) FormarCoberturasSimples(Conjunto TotalPorLvl, Cobertura Max)
+        public (Conjunto, Cobertura, Cobertura) FormarCoberturasSimples(Conjunto TotalPorLvl, Cobertura Max, double epsilon_simple)
         {
 
             Cobertura InterseccionTotal = new Cobertura();
@@ -483,7 +483,7 @@ namespace Berta
             {
                 var GEO = Operaciones.ReducirPrecision(COB.Area_Operaciones.Difference(InterseccionTotal.Area_Operaciones));
 
-                if (GEO.Area < 0.001) //Eliminar geometrias sospechosas
+                if (GEO.Area < epsilon_simple) //Eliminar geometrias sospechosas
                 {
                     var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                     GEO = gff.CreateEmpty(Dimension.Curve);
@@ -497,7 +497,7 @@ namespace Berta
                     var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                     foreach (Polygon Poly in Poligonos)
                     {
-                        if (Poly.Area > 0.0001)
+                        if (Poly.Area > epsilon_simple)
                         {
                             Verificados.Add(Poly);
                         }
@@ -516,5 +516,20 @@ namespace Berta
 
         } //coberturas simples (por cada radar y el conjunto de ellas) y intersección total (union de todo eso que no es múltiple)
 
+        public Conjunto Aplicar_SACTA(Cobertura SACTA)
+        {
+            List<Cobertura> Filtradas = new List<Cobertura>();
+
+            foreach(Cobertura Cob in this.A_Operar)
+            {
+                Geometry Filtrada = Cob.Area_Operaciones.Difference(SACTA.Area_Operaciones);
+
+                Filtradas.Add(new Cobertura(Cob.nombre, Cob.FL, "original", Filtrada));
+            }
+
+            Conjunto R = new Conjunto(Filtradas, "Filtradas", "FL999");
+
+            return R;
+        }
     }
 }
