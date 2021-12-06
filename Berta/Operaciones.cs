@@ -442,5 +442,79 @@ namespace Berta
 
             return Poligonos;
         }
+
+        public static SharpKml.Dom.Folder CarpetaRedundados(Conjunto conjunto, Conjunto CoberturasSimples, List<Conjunto> Listado_ConjuntoCoberturasMultiples, Cobertura CoberturaMaxima)
+        {
+            SharpKml.Dom.Folder Redundados = new SharpKml.Dom.Folder { Id = "Redundantes", Name = "Multi-cobertura por radar", Visibility = false }; //Carpeta donde se guardaran los resultados radar a radar
+            List<SharpKml.Dom.Folder> PorRadar = new List<SharpKml.Dom.Folder>(); //Carpeta de cada radar
+
+            //Cobertura base
+            foreach (Cobertura COB in conjunto.A_Operar)
+            {
+                //Crear una carpeta para cada radar y añadir la cobertura base
+                PorRadar.Add(new SharpKml.Dom.Folder { Id = COB.nombre, Name = COB.nombre + " " + COB.FL, Visibility = false });
+                PorRadar.Last().AddFeature(COB.CrearDocumentoSharpKML());
+            }
+
+            //Creamos carpetas por lvl de cada radar
+            List<SharpKml.Dom.Folder> PorNivelPorRadar = new List<SharpKml.Dom.Folder>();
+            int k = 1; //Desde lvl 1 (simple) a lvl máx posible
+            while (k <= PorRadar.Count())
+            {
+                foreach (Cobertura COB in conjunto.A_Operar)
+                {
+                    PorNivelPorRadar.Add(new SharpKml.Dom.Folder { Id = COB.nombre + "-" + k, Name = "Multi-cobertura " + string.Format("{0:00}", k) + " " + COB.FL, Visibility = false });
+                }
+                k++;
+            }
+
+            //Cobertura simple
+            foreach (Cobertura COB in CoberturasSimples.A_Operar)
+            {
+                //En las carpetas PorNivelPorRadar de grado 1 (simple) añadimos la cobertura en qüestión
+                PorNivelPorRadar[PorNivelPorRadar.IndexOf(PorNivelPorRadar.Where(x => x.Id == COB.nombre + "-1").ToList()[0])].AddFeature(COB.CrearDocumentoSharpKML());
+            }
+
+
+            //Cobertura multiple
+            foreach (Conjunto con in Listado_ConjuntoCoberturasMultiples)
+            {
+                //Añadir multicoberturas
+                foreach (Cobertura cob in con.A_Operar)
+                {
+                    //Buscamos los radares participantes y guardamos en la carpeta de nivel correspondiente
+                    string[] RadParticipantes = cob.nombre.Split('.');
+                    int nivel_M = cob.tipo_multiple;
+                    foreach (string Radar in RadParticipantes)
+                    {
+                        PorNivelPorRadar[PorNivelPorRadar.IndexOf(PorNivelPorRadar.Where(x => x.Id == Radar + "-" + nivel_M).ToList()[0])].AddFeature(cob.CrearDocumentoSharpKML());
+                    }
+                }
+            }
+
+            //Añadimos cobertura máxima si es que existe (crear carpeta)
+            if (CoberturaMaxima != null)
+            {
+                //Buscamos carpetas pertinentes de cada radar y añadimos la cobertura máxima
+                foreach (Cobertura COB in conjunto.A_Operar)
+                {
+                    PorNivelPorRadar[PorNivelPorRadar.IndexOf(PorNivelPorRadar.Where(x => x.Id == COB.nombre + "-" + conjunto.A_Operar.Count()).ToList()[0])].AddFeature(CoberturaMaxima.CrearDocumentoSharpKML());
+                }
+            }
+
+            //Ordenamos en cada carpeta PorRadar las carpetas PorNivelPorRadar
+            foreach (var carpeta in PorNivelPorRadar)
+            {
+                if (carpeta.Features.Count != 0) //Si esta llena de información añadimos a carpeta correspondiente
+                    PorRadar[PorRadar.IndexOf(PorRadar.Where(x => x.Id == carpeta.Id.Split('-')[0]).ToList()[0])].AddFeature(carpeta);
+            }
+            //Se añaden en carpeta redundados
+            foreach (var carpeta in PorRadar)
+            {
+                Redundados.AddFeature(carpeta);
+            }
+
+            return Redundados;
+        }
     }
 }

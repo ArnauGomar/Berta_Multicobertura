@@ -59,8 +59,7 @@ namespace Berta
                     Console.WriteLine();
                     Console.WriteLine("1 - Cálculo de multicoberturas");
                     Console.WriteLine("2 - Filtrado SACTA");
-                    Console.WriteLine("3 - Cálculo de redundáncias");
-                    Console.WriteLine("4 - Cálculo de cobertura mínima");
+                    Console.WriteLine("3 - Cálculo de cobertura mínima");
                     Console.WriteLine("5 - Ajustes");
                     Console.WriteLine();
                     Console.WriteLine("0 - Finalizar");
@@ -95,6 +94,8 @@ namespace Berta
                     {
                         List<SharpKml.Dom.Folder> Folders = new List<SharpKml.Dom.Folder>(); //Lista con archivos base kml para crear kmz final, donde se guardaran todas las carpetas con los resultados
                         SharpKml.Dom.Document KML_Cobertura_total = new SharpKml.Dom.Document(); //La cobertura total se guarda en un documento, no en una carpeta, por eso es una variable independiente
+
+                        SharpKml.Dom.Folder Redundados = new SharpKml.Dom.Folder(); //Carpeta donde se guardaran los resultados radar a radar
 
                         //Variables de información al usuario
                         string NombrePredeterminado = ""; //String para guardar un nombre de proyecto predeterminado
@@ -213,6 +214,8 @@ namespace Berta
                                 double MuestraSegundo = 163.371;
                                 double tiempo = (NumMuestras / MuestraSegundo) / 60;
                                 double segundos = ((Math.Round(tiempo, 2) - Math.Round(tiempo, 0)) * 60)+25;
+                                if (segundos < 0)
+                                    segundos = 0;
                                 Console.WriteLine("Se espera que el programa termine en unos " + Math.Round(tiempo, 0) + " minutos "+segundos+" segundos (" + DateTime.Now.ToString() + ")");
 
                                 stopwatch = Stopwatch.StartNew(); //Iniciamos el cronometro otra vez
@@ -286,6 +289,9 @@ namespace Berta
                                 else
                                     NombrePredeterminado = NombresCargados[0] + "." + NombresCargados.Last() + " (entre otros)";
 
+                                //Redundados
+                                Redundados = Operaciones.CarpetaRedundados(conjunto, CoberturasSimples, Listado_ConjuntoCoberturasMultiples, CoberturaMaxima);
+
                                 stopwatch.Stop();
                                 TiempoEjecución_Parte2 = new TimeSpan(stopwatch.ElapsedTicks);
                                 parte1 = true;
@@ -323,6 +329,8 @@ namespace Berta
                                 Console.WriteLine(N);
                             Console.WriteLine();
                             double Segs = Math.Round((Math.Round(TiempoEjecución_Parte2.TotalSeconds / 60, 2) - Math.Round(TiempoEjecución_Parte2.TotalSeconds / 60, 0))*60,0);
+                            if (Segs < 0)
+                                Segs = 0;
                             Console.WriteLine("Tiempo de ejecución: " + Math.Round(TiempoEjecución_Parte2.TotalSeconds/60,0) +" minutos " + Segs + " segundos");
                             Console.WriteLine();
 
@@ -346,6 +354,7 @@ namespace Berta
                             {
                                 Doc.AddFeature(fold); //añadir placermak dentro del documento
                             }
+                            Doc.AddFeature(Redundados); //añadimos carpeta redundados;
 
                             int Control_CM_Parte2 = -1;
                             while (Control_CM_Parte2 != 0)
