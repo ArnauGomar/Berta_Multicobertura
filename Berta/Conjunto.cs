@@ -212,7 +212,7 @@ namespace Berta
             return new Cobertura(Nombre_Resultado, this.FL, "total", GEO);
         } //Union de todas las coberturas
 
-        private List<Conjunto> FormarCoberturasMultiples_Paso1() //Conjuntos por lvl
+        private List<Conjunto> FormarCoberturasMultiples_Paso1(double Umbral) //Conjuntos por lvl
         {
             List<Conjunto> Conjuntos = new List<Conjunto>(); //Guardaremos los conjuntos (por nivel) de multicoberturas
 
@@ -229,18 +229,16 @@ namespace Berta
                 for (int i = 1; i < Count; i++)
                 {
                     BASE = BASE.Intersection(Operables[i].Area_Operaciones);
-                    if (BASE.IsEmpty)
+                    if ((BASE.IsEmpty) || (BASE.Area < Umbral)) //Si el poligono es empty o su area es inferior a Umbral paramos cálculo
                         break;
                 }
 
                 //Buscar conjunto de coberturas del mismo nivel, si no existe crearlo
-                if (BASE.IsEmpty == false)
+                if ((BASE.IsEmpty == false)&& (BASE.Area >= Umbral))
                 {
                     //Si el resultado no es nulo (No interseccionan por lo que el resultado es nulo) creamos nueva cobertura y añadimos al conjunto
                     Cobertura A_Guardar = new Cobertura(combinacion, this.FL, "multi", MultipleMax, BASE);
 
-                    //if(Conjuntos.Count !=0)
-                    //{
                     //Buscar conjunto (indice de)
                     List<Conjunto> Extraido = Conjuntos.Where(x => x.Identificador == "multi " + MultipleMax).ToList();
                     if (Extraido.Count != 0)
@@ -284,13 +282,15 @@ namespace Berta
                 return (null, false);
         }
 
-        private (Conjunto, List<Conjunto>) FormarCoberturasMultiples_Paso3(List<Conjunto> CoberturasPorLvl, bool CoberturaMAX, double epsilon) //Cálcula anillos de coberturas del mismo lvl
+        private (Conjunto, List<Conjunto>) FormarCoberturasMultiples_Paso3(List<Conjunto> CoberturasPorLvl, bool CoberturaMAX, double epsilon, double Umbral) //Cálcula anillos de coberturas del mismo lvl
         {
             //Dos casos, hay multiple máx o no. Si la hay se ejecuta como en version Alpha
             List<Cobertura> TotalPorLVL = new List<Cobertura>(); //Lista para guardar la unión por lvl de multicobertura (anillos)
+            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //Factoria para crear todos los multipoligonos o poligonos del codigo
 
             if (CoberturaMAX) //Hay cobertura max
             {
+                List<Polygon> Verificados = new List<Polygon>(); //Lista de verificación de poligonos (fitrado y umbral)
                 var GEO_Resta = Operaciones.ReducirPrecision(CoberturasPorLvl.First().A_Operar.First().Area_Operaciones); //Area que restaremos a todas las múlticoberturas para así mostrar correctamente el resultado
 
                 int j = 1; //El primero no se calcula (MAX)
@@ -310,20 +310,18 @@ namespace Berta
                         //Restar
                         var NewGeo = Operaciones.ReducirPrecision(Cob.Area_Operaciones.Difference(GEO_Resta));
                         //NewGeo = Operaciones.EliminarFormasExtrañas(NewGeo);
-                        if (NewGeo.Area < epsilon) //Eliminar geometrias sospechosas
+                        if ((NewGeo.Area < epsilon) || (NewGeo.Area < Umbral)) //Eliminar geometrias sospechosas
                         {
-                            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                             NewGeo = gff.CreateEmpty(Dimension.Curve);
                         }
                         else if (NewGeo.GetType().ToString() != "NetTopologySuite.Geometries.Polygon")
                         {
                             MultiPolygon Verificar = (MultiPolygon)NewGeo;
                             var Poligonos = Verificar.Geometries;
-                            List<Polygon> Verificados = new List<Polygon>();
-                            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                            Verificados = new List<Polygon>();
                             foreach (Polygon Poly in Poligonos)
                             {
-                                if (Poly.Area > epsilon)
+                                if ((Poly.Area > epsilon) && (Poly.Area >= Umbral))
                                 {
                                     Verificados.Add(Poly);
                                 }
@@ -332,16 +330,23 @@ namespace Berta
 
                             NewGeo = gff.CreateMultiPolygon(Verificados.ToArray());
                         }
-                        //else if (NewGeo.GetType().ToString() == "NetTopologySuite.Geometries.Polygon") //Algoritmo AplicarRamerDouglasPeucker
-                        //    NewGeo = Operaciones.AplicarRamerDouglasPeucker(NewGeo.Coordinates, 0.001);
-                        //else
-                        //    NewGeo = Operaciones.AplicarRamerDouglasPeucker_Multi((MultiPolygon)NewGeo, 0.001);
+
                         Cob.ActualizarAreas(NewGeo); //Actualizar
                     }
 
 
                     var UnionLvl = Operaciones.ReducirPrecision(CoberturasPorLvl[j].FormarCoberturaTotal().Area_Operaciones);
-                    TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl[j].A_Operar[0].tipo_multiple, Operaciones.ReducirPrecision(UnionLvl.Difference(GEO_Resta))));
+
+                    Geometry Resta = UnionLvl.Difference(GEO_Resta);
+                    //Aplicar umbral al anillo (resta)
+                    foreach (Polygon TrozoAnillo in (MultiPolygon)Resta)
+                    {
+                        if (TrozoAnillo.Area >= Umbral)
+                            Verificados.Add(TrozoAnillo);
+                    }
+                    Resta = gff.CreateMultiPolygon(Verificados.ToArray());
+
+                    TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl[j].A_Operar[0].tipo_multiple, Resta)); //Se crea el anillo
                     GEO_Resta = Operaciones.ReducirPrecision(GEO_Resta.Union(UnionLvl));
                     TotalPorLVL.RemoveAll(x => x.Area_Operaciones.IsEmpty == true);//Eliminamos coberturas vacias
 
@@ -360,7 +365,16 @@ namespace Berta
                 while (j < CoberturasPorLvl.Count)
                 {
                     var NewG = Operaciones.ReducirPrecision(CoberturasPorLvl[j].FormarCoberturaTotal().Area_Operaciones); //Ejecutamos unión de conjunto
-                    var Resta = NewG.Difference(GEO_Resta); //Hacemos la diferencia 
+                    Geometry Resta = NewG.Difference(GEO_Resta); //Hacemos la diferencia 
+
+                    //Aplicar umbral al anillo (resta)
+                    List<Polygon> Verificados = new List<Polygon>();
+                    foreach (Polygon TrozoAnillo in(MultiPolygon)Resta)
+                    {
+                        if (TrozoAnillo.Area >= Umbral)
+                            Verificados.Add(TrozoAnillo);
+                    }
+                    Resta = gff.CreateMultiPolygon(Verificados.ToArray());
 
                     TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl[j].A_Operar[0].tipo_multiple, Resta)); //Guardamos anillo resultante
 
@@ -369,10 +383,9 @@ namespace Berta
                         //Restar
                         var CobRound = Operaciones.ReducirPrecision(Cob.Area_Operaciones);
                         var NewGeo = Operaciones.ReducirPrecision(CobRound.Difference(GEO_Resta));
-                        //NewGeo = Operaciones.EliminarFormasExtrañas(NewGeo);
-                        if (NewGeo.Area < epsilon) //Eliminar geometrias sospechosas
+                        if ((NewGeo.Area < epsilon) || (NewGeo.Area < Umbral))  //Eliminar geometrias sospechosas o eliminar geometrias discriminadas (se deja epsilon por si umbral se reduce mucho)
                         {
-                            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                            
                             NewGeo = gff.CreateEmpty(Dimension.Curve);
                         }
                         else if (NewGeo.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
@@ -380,12 +393,12 @@ namespace Berta
                             //Eliminar geometrias sospechosas de un multipoligono
                             MultiPolygon Verificar = (MultiPolygon)NewGeo;
                             var Poligonos = Verificar.Geometries;
-                            List<Polygon> Verificados = new List<Polygon>();
-                            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                            Verificados = new List<Polygon>();
+
                             foreach (Polygon Poly in Poligonos)
                             {
-                                if (Poly.Area > epsilon) //TST 0.00001
-                                {
+                                if ((Poly.Area > epsilon) && (Poly.Area >= Umbral)) //TST 0.00001, eliminar poligonos por debajo de epsilon (VERSIÓN FINAL: Eliminar si no superan el umbral
+                                {                                                   // se deja epsilon por si umbral se reduce mucho)
                                     Verificados.Add(Poly);
                                 }
                             }
@@ -393,10 +406,7 @@ namespace Berta
 
                             NewGeo = gff.CreateMultiPolygon(Verificados.ToArray());
                         }
-                        //else if (NewGeo.GetType().ToString() == "NetTopologySuite.Geometries.Polygon") //Algoritmo AplicarRamerDouglasPeucker
-                        //    NewGeo = Operaciones.AplicarRamerDouglasPeucker(NewGeo.Coordinates, 0.01);
-                        //else
-                        //    NewGeo = Operaciones.AplicarRamerDouglasPeucker_Multi((MultiPolygon)NewGeo, 0.01);dxvfghgvb
+
                         Cob.ActualizarAreas(NewGeo); //Actualizar
                     }
 
@@ -411,23 +421,20 @@ namespace Berta
 
             if (TotalPorLVL.Count != 0)
             {
-                Conjunto TotalPorLvL = new Conjunto(TotalPorLVL, "Total por lvl", this.FL); //Generamos un conjunto con todos los anillos
-                return (TotalPorLvL, CoberturasPorLvl);
+                Conjunto Anillos = new Conjunto(TotalPorLVL, "Total por lvl", this.FL); //Generamos un conjunto con todos los anillos
+                return (Anillos, CoberturasPorLvl);
             }
             else
                 return (null, CoberturasPorLvl); //El elemento totalPorLvl solo sera nulo en calculos de coberturas simples
-
-
-
         }
 
-        public (List<Conjunto>, Conjunto, Cobertura) FormarCoberturasMultiples(double epsilon)
+        public (List<Conjunto>, Conjunto, Cobertura) FormarCoberturasMultiples(double epsilon, double Umbral)
         {
-            List<Conjunto> ConjuntosPorLvl = FormarCoberturasMultiples_Paso1(); //Ejecutar paso 1 
+            List<Conjunto> ConjuntosPorLvl = FormarCoberturasMultiples_Paso1(Umbral); //Ejecutar paso 1 
 
             (Cobertura CoberturaMaxima, bool existeMax) = FormarCoberturasMultiples_Paso2(ConjuntosPorLvl); //Ejecutar paso 2
 
-            (Conjunto Anillos, List<Conjunto> ConjuntosPorLvl_F) = FormarCoberturasMultiples_Paso3(ConjuntosPorLvl, existeMax, epsilon);
+            (Conjunto Anillos, List<Conjunto> ConjuntosPorLvl_F) = FormarCoberturasMultiples_Paso3(ConjuntosPorLvl, existeMax, epsilon, Umbral);
 
             if (existeMax)
             {
@@ -438,7 +445,7 @@ namespace Berta
                 return (ConjuntosPorLvl_F, Anillos, null); //Retornamos null la cobertura máxima
         }
 
-        public (Conjunto, Cobertura, Cobertura) FormarCoberturasSimples(Conjunto TotalPorLvl, Cobertura Max, double epsilon_simple)
+        public (Conjunto, Cobertura, Cobertura) FormarCoberturasSimples(Conjunto TotalPorLvl, Cobertura Max, double epsilon_simple, double Umbral)
         {
 
             Cobertura InterseccionTotal = new Cobertura();

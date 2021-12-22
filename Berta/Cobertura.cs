@@ -181,7 +181,10 @@ namespace Berta
                 List<string> V = nombre.Split(" () ").ToList();
                 V = V.OrderBy(x => x).ToList(); //Ordenar alfabeticamente
                 nombre = string.Join('.', V);
-                r = nombre;
+                if (V.Count == 1)
+                    r = nombre + " " + this.FL;
+                else
+                    r = nombre;
             }
 
 

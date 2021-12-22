@@ -40,8 +40,10 @@ namespace Berta
             int CvsM = Convert.ToInt32(CvsM_R.ReadLine());
             Console.WriteLine(CvsM);
 
-            //Obtener tolerancias
+            //Obtener tolerancias y declarar umbrales
             double epsilon = Convert.ToDouble(CvsM_R.ReadLine());
+            double Trans = 0.0003636658613823218; //1 NM^2 Valor empirico
+            double Umbral_Areas = 1 * Trans;
             Console.WriteLine(epsilon);
             double epsilon_simple = Convert.ToDouble(CvsM_R.ReadLine());
             Console.WriteLine(epsilon_simple);
@@ -55,9 +57,9 @@ namespace Berta
                 try
                 {
                     Console.Clear();
-                    Console.WriteLine("Berta M");
+                    Console.WriteLine("Berta T");
                     Console.WriteLine();
-                    Console.WriteLine("1 - Cálculo de multicoberturas");
+                    Console.WriteLine("1 - Cálculo de multi-coberturas");
                     Console.WriteLine("2 - Filtrado SACTA");
                     Console.WriteLine("3 - Cálculo de cobertura mínima");
                     Console.WriteLine("5 - Ajustes");
@@ -117,9 +119,9 @@ namespace Berta
                                 while (!FL_correcto)
                                 {
                                     Console.Clear();
-                                    Console.WriteLine("Berta M");
+                                    Console.WriteLine("Berta T");
                                     Console.WriteLine();
-                                    Console.WriteLine("1 - Cálculo de multicoberturas");
+                                    Console.WriteLine("1 - Cálculo de multi-coberturas");
                                     Console.WriteLine();
                                     Console.WriteLine("FL seleccionado (p.e.: FL100 / FL090):");
 
@@ -148,6 +150,16 @@ namespace Berta
                                 Directorio_IN = Console.ReadLine();
                                 Console.WriteLine();
                                 DI = new DirectoryInfo(Directorio_IN); //Abrimos carpeta in para leer archivos
+
+                                //1.2.2 Entrada umbral de filtro (1NM de forma predeterminada)
+                                Console.WriteLine();
+                                Console.WriteLine("Introducir el umbral de discriminación de areas [NM^2] (Predeterminado: 1 NM^2)");
+                                string NM_Umbral = Console.ReadLine();
+                                if(NM_Umbral!="")
+                                {
+                                    Umbral_Areas = Convert.ToDouble(NM_Umbral) * Trans;
+                                }
+
                             }//Modo menú
                             else//Modo comando
                             {
@@ -170,9 +182,9 @@ namespace Berta
                                     else
                                     {
                                         Console.Clear();
-                                        Console.WriteLine("Berta M");
+                                        Console.WriteLine("Berta T");
                                         Console.WriteLine();
-                                        Console.WriteLine("1 - Cálculo de multicoberturas");
+                                        Console.WriteLine("1 - Cálculo de multi-coberturas");
                                         Console.WriteLine();
                                         Console.WriteLine("El FL indicado no es correcto, introduzca uno correcto");
                                         Console.WriteLine();
@@ -182,17 +194,15 @@ namespace Berta
                                 }
                             }//Modo comando
 
-
                             //1.3 - Cargar archivos
-                            Console.WriteLine("Archivos cargados:");
-
                             
+                            Console.WriteLine("Archivos cargados:");
                             if(DI.GetFiles().Count()>1) //Si hay mas de 1 archivo dentro de la carpeta se ejecuta el programa
                             {
                                 //Cargar coberturas originales 
                                 List<Cobertura> Originales = new List<Cobertura>();
                                 (Originales, NombresCargados) = Operaciones.CargarCoberturas(DI, FL_IN);
-
+                                
                                 //1.4 - Cálculos
                                 //Originales (crear carpeta)
                                 Conjunto conjunto = new Conjunto(Originales, "original", FL_IN);
@@ -211,12 +221,14 @@ namespace Berta
 
                                 //Mostrar en consola un tiempo estimado de cálculo
                                 double NumMuestras = conjunto.Combinaciones.Count();
-                                double MuestraSegundo = 163.371;
+                                double MuestraSegundo = 163.371; //Valor empirico
                                 double tiempo = (NumMuestras / MuestraSegundo) / 60;
-                                double segundos = ((Math.Round(tiempo, 2) - Math.Round(tiempo, 0)) * 60)+25;
+                                double segundos = Math.Round(((Math.Round(tiempo, 2) - Math.Round(tiempo, 0)) * 60)+25,0);
                                 if (segundos < 0)
                                     segundos = 0;
                                 Console.WriteLine("Se espera que el programa termine en unos " + Math.Round(tiempo, 0) + " minutos "+segundos+" segundos (" + DateTime.Now.ToString() + ")");
+                                Console.WriteLine();
+                                Console.WriteLine("Calculando...");
 
                                 stopwatch = Stopwatch.StartNew(); //Iniciamos el cronometro otra vez
                                 var folder_BASE = new SharpKml.Dom.Folder { Id = "Coberturas-Base", Name = "Coberturas Base " + FL_IN, }; //Creamos carpeta donde guardaremos todos los documentos relacionados
@@ -234,10 +246,10 @@ namespace Berta
                                 KML_Cobertura_total = CoberturaTotal.CrearDocumentoSharpKML(); //Documento KML de la cobertura total
 
                                 //Coberturas multiples y multiples total
-                                (List<Conjunto> Listado_ConjuntoCoberturasMultiples, Conjunto Anillos, Cobertura CoberturaMaxima) = conjunto.FormarCoberturasMultiples(epsilon); //Cálculo coberturas múltiples
+                                (List<Conjunto> Listado_ConjuntoCoberturasMultiples, Conjunto Anillos, Cobertura CoberturaMaxima) = conjunto.FormarCoberturasMultiples(epsilon, Umbral_Areas); //Cálculo coberturas múltiples
 
                                 //Coberturas simples
-                                (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Anillos, CoberturaMaxima, epsilon_simple); //Cálculo coberturas simples
+                                (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Anillos, CoberturaMaxima, epsilon_simple, Umbral_Areas); //Cálculo coberturas simples
 
                                 //Añadir coberturas simples (crear carpeta)
                                 var folder_Simples = new SharpKml.Dom.Folder();
@@ -317,11 +329,13 @@ namespace Berta
 
                             //Informar al usuario
                             Console.Clear();
-                            Console.WriteLine("Berta M");
+                            Console.WriteLine("Berta T");
                             Console.WriteLine();
-                            Console.WriteLine("1 - Cálculo de multicoberturas");
+                            Console.WriteLine("1 - Cálculo de multi-coberturas");
                             Console.WriteLine();
                             Console.WriteLine("Directorio de entrada: " + Directorio_IN);
+                            Console.WriteLine();
+                            Console.WriteLine("Umbral de discriminación: "+ Math.Round(Umbral_Areas/Trans,3)+" NM^2");
                             Console.WriteLine();
                             Console.WriteLine("Archivos cargados:");
                             Console.WriteLine();
@@ -361,11 +375,13 @@ namespace Berta
                             {
                                 //Informar al usuario
                                 Console.Clear();
-                                Console.WriteLine("Berta M");
+                                Console.WriteLine("Berta T");
                                 Console.WriteLine();
-                                Console.WriteLine("1 - Cálculo de multicoberturas");
+                                Console.WriteLine("1 - Cálculo de multi-coberturas");
                                 Console.WriteLine();
                                 Console.WriteLine("Directorio de entrada: " + Directorio_IN);
+                                Console.WriteLine();
+                                Console.WriteLine("Umbral de discriminación: " + Math.Round(Umbral_Areas / Trans, 3) + " NM^2");
                                 Console.WriteLine();
                                 Console.WriteLine("Archivos cargados:");
                                 Console.WriteLine();
@@ -404,12 +420,12 @@ namespace Berta
                             }
                         } //Parte2 - Guardar fichero en carpeta salida, obtener nombre de proyecto
                     }//Cáclulo de multicobertura
-                    else if (Control_M == 2)
+                    else if (Control_M == 2) //Filtrado SACTA
                     {
                         try
                         {
                             Console.Clear();
-                            Console.WriteLine("Berta M");
+                            Console.WriteLine("Berta T");
                             Console.WriteLine();
                             Console.WriteLine("2 - Filtrado SACTA");
                             Console.WriteLine();
@@ -426,15 +442,15 @@ namespace Berta
                             //Cargar todos los archivos de la carpeta
                             (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null);
 
-                            if (Directorio_Cobertura.GetFiles().Count()>1) //Más de un archivo
+                            if (Directorio_Cobertura.GetFiles().Count()>=1) //Minimo un archivo
                             {
-                                bool Control_DC = false;
+                                bool Control_DC = false; //Bucle para cargar
                                 while (Control_DC==false)
                                 {
                                     try
                                     {
                                         Console.Clear();
-                                        Console.WriteLine("Berta M");
+                                        Console.WriteLine("Berta T");
                                         Console.WriteLine();
                                         Console.WriteLine("2 - Filtrado SACTA");
                                         Console.WriteLine();
@@ -479,7 +495,7 @@ namespace Berta
                                             Seleccionado.Add(NombresCargados[Control_DC_n - 1]);
                                             NombresCargados = Seleccionado;
                                         }
-                                        else
+                                        else //Identificador no válido
                                         {
                                             Console.WriteLine();
                                             Console.WriteLine("Identificador no válido");
@@ -500,161 +516,9 @@ namespace Berta
                             Conjunto conjuntoAfiltrar = new Conjunto(Coberturas, "original", "FL999");
                             try
                             {
-                                //SharpKml.Dom.Folder Carpeta_Final = new SharpKml.Dom.Folder(); //Donde se cargaran las carpetas apra poder navegar en ellas
-                                //bool ControlCarpetaSACTA = false;
-                                //while (ControlCarpetaSACTA == false)
-                                //{
-                                //    var Carpetas = F.Root.Flatten().OfType<SharpKml.Dom.Folder>().ToList(); //Extraemos carpetas del KML 
-                                //                                                                            //Mostrar en consola las carpetas dentro del KML
-                                //    Console.Clear();
-                                //    Console.WriteLine("Berta M");
-                                //    Console.WriteLine();
-                                //    Console.WriteLine("2 - Filtrado SACTA");
-                                //    Console.WriteLine();
-                                //    Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
-                                //    Console.WriteLine();
-                                //    Console.WriteLine("Archivos cargados:");
-                                //    foreach (string Nom in NombresCargados)
-                                //    {
-                                //        Console.WriteLine(Nom);
-                                //    }
-                                //    Console.WriteLine();
-                                //    Console.WriteLine("Directorio completo del kmz de filtros SACTA: " + path_SACTA);
-                                //    Console.WriteLine();
-                                //    Console.WriteLine("Navegar por " + Nombre);
-                                //    Console.WriteLine();
-                                //    int j = 1;
-                                //    List<string> NombresCarpetas = new List<string>(); //Para buscar despues la carpeta seleccioanda
-                                //    foreach (var Carpeta in Carpetas)
-                                //    {
-                                //        string NombreCarpeta = Carpeta.Name;
-
-                                //        if (Carpeta.Flatten().OfType<SharpKml.Dom.Folder>().ToList().Count > 4)
-                                //        {
-                                //            Console.WriteLine(j + " - " + NombreCarpeta);
-                                //        }
-                                //        else if (Carpeta.Flatten().OfType<SharpKml.Dom.Folder>().ToList().Count > 2)
-                                //        {
-                                //            Console.WriteLine("\t"+ j + " - " + NombreCarpeta);
-                                //        }
-                                //        else if (Carpeta.Flatten().OfType<SharpKml.Dom.Folder>().ToList().Count > 1)
-                                //        {
-                                //            Console.WriteLine("\t\t" + j + " - " + NombreCarpeta);
-                                //        }
-                                //        else
-                                //        {
-                                //            Console.WriteLine("\t\t\t" + j + " - " + NombreCarpeta);
-                                //        }
-
-                                //        NombresCarpetas.Add(NombreCarpeta);
-                                //        j++;
-                                //    }
-                                //    Console.WriteLine();
-                                //    Console.WriteLine("Introduzca el identificador de la carpeta:");
-                                //    Console.WriteLine("-1 para cambiar de archivo filtro SACTA");
-                                //    int ControlCarpetaSACTA_n = Convert.ToInt32(Console.ReadLine());
-
-                                //    if (ControlCarpetaSACTA_n == -1) //Cambiar directorio SACTA
-                                //    {
-                                //        Console.Clear();
-                                //        Console.WriteLine("Berta M");
-                                //        Console.WriteLine();
-                                //        Console.WriteLine("2 - Filtrado SACTA");
-                                //        Console.WriteLine();
-                                //        Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
-                                //        Console.WriteLine();
-                                //        Console.WriteLine("Archivos cargados:");
-                                //        foreach (string Nom in NombresCargados)
-                                //        {
-                                //            Console.WriteLine(Nom);
-                                //        }
-                                //        Console.WriteLine();
-                                //        Console.WriteLine("Directorio completo del kmz de filtros SACTA:");
-                                //        path_SACTA = Console.ReadLine();
-
-                                //        //Abrir KML
-                                //        (H, Nombre) = Operaciones.AbrirKMLdeKMZ(path_SACTA);
-
-                                //        F = KmlFile.Load(H); //Cargar KML
-                                //        H.Close();
-                                //        Carpetas = F.Root.Flatten().OfType<SharpKml.Dom.Folder>().ToList(); //Extraemos carpetas del KML 
-                                //    }
-                                //    else if (ControlCarpetaSACTA_n - 1 <= NombresCarpetas.Count()) //Abrir carpeta en concreto
-                                //    {
-                                //        ControlCarpetaSACTA = true; //Paramos el bucle
-                                //    }
-                                //}
-
-                                //Al salir del bucle ya hemos entrado en una carpeta que contiene filtros (geometrias)
-                                //Cargamos geometrias y lo guardamos en una cobertura (Traducción sharpKML - NTS)
-
-                                //var polyGON = Carpeta_Final.Flatten().OfType<SharpKml.Dom.Polygon>().ToList(); //Extraer lista de poligonos del KML
-
-                                //Cargamos un KMZ con solo la forma geometrica que queremos filtrar
-
-                                //List<Geometry> Poligonos = new List<Geometry>(); //Lista donde se guardaran los poligonos
-
-                                //Implementación múltiples poligonos
-                                //foreach (SharpKml.Dom.Polygon poly in polyGON)
-                                //{
-                                //    SharpKml.Dom.CoordinateCollection Coordenadas = poly.OuterBoundary.LinearRing.Coordinates; //Extraer coordenadas del poligono SharpKml (solo coordenadas externas no huecos)
-
-                                //    List<SharpKml.Base.Vector> A = new List<SharpKml.Base.Vector>(); //Guardar coordenadas del poligono en una lista generica (paso necesario para poder extraer lat y long)
-                                //    foreach (var c in Coordenadas)
-                                //    {
-                                //        A.Add(c);
-                                //    }
-                                //    //Guardar coordenadas del poligono en un vector de coordenadas NetTopologySuite
-                                //    int max = Coordenadas.Count();
-                                //    Coordinate[] Coordenades = new Coordinate[max];
-                                //    int i = 0;
-                                //    while (i < max)
-                                //    {
-                                //        Coordenades[i] = new Coordinate(A[i].Longitude, A[i].Latitude);
-                                //        i++;
-                                //    }
-                                //    //Crear poligono NetTopologySuite
-                                //    var gf = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
-                                //    Geometry poly_T = gf.CreatePolygon(Coordenades); //Poligono a computar!
-
-                                //    //Implementación huecos
-                                //    List<Geometry> Huecos = new List<Geometry>(); //Guardar huecos existentes
-
-                                //    if (poly.InnerBoundary != null)
-                                //    {
-                                //        foreach (SharpKml.Dom.InnerBoundary IB in poly.InnerBoundary)
-                                //        {
-                                //            SharpKml.Dom.CoordinateCollection Coordenadas_Hueco = IB.LinearRing.Coordinates;
-                                //            List<SharpKml.Base.Vector> B = new List<SharpKml.Base.Vector>();
-
-                                //            //Guardar coordenadas del poligono en una lista generica (paso necesario para poder extraer lat y long)
-                                //            foreach (var c in Coordenadas_Hueco)
-                                //            {
-                                //                B.Add(c);
-                                //            }
-                                //            //Guardar coordenadas del poligono en un vector de coordenadas NetTopologySuite
-                                //            int maxx = Coordenadas_Hueco.Count();
-                                //            Coordinate[] Coordenadess = new Coordinate[maxx];
-                                //            int ii = 0;
-                                //            while (ii < maxx)
-                                //            {
-                                //                Coordenadess[ii] = new Coordinate(B[ii].Longitude, B[ii].Latitude);
-                                //                ii++;
-                                //            }
-                                //            //Crear poligono NetTopologySuite
-                                //            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
-                                //            Geometry poly_T_H = gff.CreatePolygon(Coordenadess); //Poligono a computar!
-                                //            poly_T = poly_T.Difference(poly_T_H);
-                                //        }
-                                //    }
-
-                                //    Poligonos.Add(poly_T); //Añadir poligono a la lista para generar cobertura
-                                //}
-                                //Filtro_SACTA = new Cobertura("Filtro", "FL999", "original", Poligonos);
-
                                 //Obtenemos el filtro SACTA
                                 Console.Clear();
-                                Console.WriteLine("Berta M");
+                                Console.WriteLine("Berta T");
                                 Console.WriteLine();
                                 Console.WriteLine("2 - Filtrado SACTA");
                                 Console.WriteLine();
@@ -671,21 +535,15 @@ namespace Berta
 
                                 //Abrir KML
                                 (FileStream H, string Nombre) = Operaciones.AbrirKMLdeKMZ(path_SACTA);
-
-                                //Abrir KML //LOCO QUE NOMES ES 1 ARCHIU!!!!!!!
-                                //(List<Cobertura> F_SACTA, List<string> Nombres_Filtro) = Operaciones.CargarCoberturas(Directorio_Filtro, "FL999");
-
                                 List<Geometry> Poligonos = Operaciones.TraducirPoligono(H, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
-
                                 Cobertura Filtro_SACTA = new Cobertura("Filtro", "FL999", "original", Poligonos); //Cobertura donde guardaremos el filtro SACTA seleccionado
 
-                                ////Ejecutar filtrado
-
+                                //Ejecutar filtrado
                                 Conjunto Filtrado = conjuntoAfiltrar.Aplicar_SACTA(Filtro_SACTA);
 
                                 //Obtener directorio de salida
                                 Console.Clear();
-                                Console.WriteLine("Berta M");
+                                Console.WriteLine("Berta T");
                                 Console.WriteLine();
                                 Console.WriteLine("2 - Filtrado SACTA");
                                 Console.WriteLine();
@@ -704,7 +562,7 @@ namespace Berta
                                     {
                                         var doc = Cob.CrearDocumentoSharpKML();
 
-                                        int Control = Operaciones.CrearKML_KMZ(doc, doc.Name+"-"+Cob.FL, "Temporal", path_Exp); //Se crea un kml temporal para después crear KMZ
+                                        int Control = Operaciones.CrearKML_KMZ(doc, doc.Name, "Temporal", path_Exp); //Se crea un kml temporal para después crear KMZ
                                         if (Control == 0)
                                         {
                                             Control_CM_Parte2 = 0; //Finalizar bucle
@@ -737,7 +595,7 @@ namespace Berta
                             Console.WriteLine("Enter para continuar");
                             Console.ReadLine();
                         }
-                    }
+                    } //Filtrado SACTA
                     else if (Control_M == 5)//Ajustes
                     {
                         int Control_A = -1;
@@ -746,23 +604,23 @@ namespace Berta
                             while (Control_A != 0)
                             {
                                 Console.Clear();
-                                Console.WriteLine("Berta M");
+                                Console.WriteLine("Berta T");
                                 Console.WriteLine();
                                 Console.WriteLine("5 - Ajustes");
                                 Console.WriteLine();
                                 Console.WriteLine("1 - Seleccionar comando/menú");
-                                Console.WriteLine("2 - Ajustar tolerancia de filtrado múltiple (por si desaparecen ciertas areas pequeñas, PUEDEN APARECER RESULTADOS ERRONEOS)");
-                                Console.WriteLine("3 - Ajustar tolerancia de filtrado simple (por si desaparecen ciertas areas pequeñas, PUEDEN APARECER RESULTADOS ERRONEOS)");
+                                Console.WriteLine("2 - Ajustar tolerancia de filtrado múltiple (evitar la desaparición de ciertas áreas pequeñas, PUEDEN APARECER RESULTADOS ERRÓNEOS)");
+                                Console.WriteLine("3 - Ajustar tolerancia de filtrado simple (evitar la desaparición de ciertas áreas pequeñas, PUEDEN APARECER RESULTADOS ERRÓNEOS)");
                                 Console.WriteLine();
                                 Console.WriteLine("0 - Volver a menú principal");
                                 Console.WriteLine();
                                 Console.WriteLine();
-                                Console.WriteLine("Introduzca identificador de operación (p.e. 1)");
+                                Console.WriteLine("Introduzca identificador de operación (p.e. 1):");
                                 Control_A = Convert.ToInt32(Console.ReadLine());
                                 if (Control_A == 1) //cambiar de version comando/menu
                                 {
                                     Console.Clear();
-                                    Console.WriteLine("Berta M");
+                                    Console.WriteLine("Berta T");
                                     Console.WriteLine();
                                     Console.WriteLine("5 - Ajustes: 1 - Seleccionar comando/menú");
                                     Console.WriteLine();
@@ -773,7 +631,7 @@ namespace Berta
                                     try
                                     {
                                         Console.Clear();
-                                        Console.WriteLine("Berta M");
+                                        Console.WriteLine("Berta T");
                                         Console.WriteLine();
                                         Console.WriteLine("5 - Ajustes: 3 - Ajustar tolerancia de filtrado múltiple");
                                         Console.WriteLine();
@@ -783,7 +641,7 @@ namespace Berta
                                         epsilon = Convert.ToDouble(Console.ReadLine());
 
                                         Console.Clear();
-                                        Console.WriteLine("Berta M");
+                                        Console.WriteLine("Berta T");
                                         Console.WriteLine();
                                         Console.WriteLine("5 - Ajustes: 3 - Ajustar tolerancia de filtrado múltiple");
                                         Console.WriteLine();
@@ -807,7 +665,7 @@ namespace Berta
                                     try
                                     {
                                         Console.Clear();
-                                        Console.WriteLine("Berta M");
+                                        Console.WriteLine("Berta T");
                                         Console.WriteLine();
                                         Console.WriteLine("5 - Ajustes: 3 - Ajustar tolerancia de filtrado simple");
                                         Console.WriteLine();

@@ -220,112 +220,33 @@ namespace Berta
                 //Abrir KML
                 (FileStream H, string Nombre) =  AbrirKMLdeKMZ(file.FullName);
 
-                if (FL_IN == null)
+                //Problemática -FLXXX o _FLXXX + problemática FL en filtrado SACTA
+                string Nombre_sin_fl="ERROR";
+                string[] V = Nombre.Split('-');
+                if (V.Length > 1) //Nombre en formato XX_XXXXXXX-FLXXX
                 {
-                    FL_IN = Nombre.Split('-')[1];
+                    if (FL_IN == null)
+                        FL_IN = V[1];
+                    Nombre_sin_fl = V[0];
                 }
-                else if (Nombre.Split('-').Count()>1)
+                else 
                 {
-                    FL_IN = Nombre.Split('-')[1];
+                    V = Nombre.Split('_'); //Nombre en formato XX_XXXXXXX_FLXXX
+                    if (Nombre.Split('_').Length > 1)
+                    {
+                        if (FL_IN == null)
+                            FL_IN = V.Last();
+                        List<string> L = V.ToList();
+                        L.Remove(FL_IN);
+                        Nombre_sin_fl = string.Join('_',L);
+                    }
+                     
                 }
-
-                //if (File.Exists(Path.Combine(@".\Temporal", file.Name.Split(".")[0] + ".kml")))
-                //{
-                //    H = File.Open(Path.Combine(@".\Temporal", file.Name.Split(".")[0] + ".kml"), FileMode.Open); //Abrir KML  
-                //    FileName = file.Name.Split(".")[0];
-                //    Nombre = FileName;
-                //    if (FL_IN == null)
-                //    {
-                //        FL_IN = Nombre.Split('-')[1];
-                //    }
-                //}
-
-                //else
-                //{
-                //    H = File.Open(Path.Combine(@".\Temporal", "doc.kml"), FileMode.Open); //Abrir KML generico 
-                //    FileName = "doc";
-                //    Nombre = file.Name.Split(".")[0];
-                //    if (FL_IN == null)
-                //    {
-                //        FL_IN = Nombre.Split('-')[1];
-                //    }
-                //}
-
-                
-                ////Eliminar archivo temporal
-                //if (File.Exists(Path.Combine(@".\Temporal", "" + FileName + ".kml")))
-                //{
-                //    // If file found, delete it    
-                //    File.Delete(Path.Combine(@".\Temporal", "" + FileName + ".kml"));
-                //}
-
-                //KmlFile F = KmlFile.Load(H); //Cargar KML
-                //H.Close();
-
-                //var polyGON = F.Root.Flatten().OfType<SharpKml.Dom.Polygon>().ToList(); //Extraer lista de poligonos del KML
-
-                //List<Geometry> Poligonos = new List<Geometry>(); //Lista donde se guardaran los poligonos
-
-                ////Implementación múltiples poligonos
-                //foreach (SharpKml.Dom.Polygon poly in polyGON)
-                //{
-                //    SharpKml.Dom.CoordinateCollection Coordenadas = poly.OuterBoundary.LinearRing.Coordinates; //Extraer coordenadas del poligono SharpKml (solo coordenadas externas no huecos)
-
-                //    List<SharpKml.Base.Vector> A = new List<SharpKml.Base.Vector>(); //Guardar coordenadas del poligono en una lista generica (paso necesario para poder extraer lat y long)
-                //    foreach (var c in Coordenadas)
-                //    {
-                //        A.Add(c);
-                //    }
-                //    //Guardar coordenadas del poligono en un vector de coordenadas NetTopologySuite
-                //    int max = Coordenadas.Count();
-                //    Coordinate[] Coordenades = new Coordinate[max];
-                //    int i = 0;
-                //    while (i < max)
-                //    {
-                //        Coordenades[i] = new Coordinate(A[i].Longitude, A[i].Latitude);
-                //        i++;
-                //    }
-                //    //Crear poligono NetTopologySuite
-                //    var gf = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
-                //    Geometry poly_T = gf.CreatePolygon(Coordenades); //Poligono a computar!
-
-                //    //Implementación huecos
-                //    List<Geometry> Huecos = new List<Geometry>(); //Guardar huecos existentes
-
-                //    if (poly.InnerBoundary != null)
-                //    {
-                //        foreach (SharpKml.Dom.InnerBoundary IB in poly.InnerBoundary)
-                //        {
-                //            SharpKml.Dom.CoordinateCollection Coordenadas_Hueco = IB.LinearRing.Coordinates;
-                //            List<SharpKml.Base.Vector> B = new List<SharpKml.Base.Vector>();
-
-                //            //Guardar coordenadas del poligono en una lista generica (paso necesario para poder extraer lat y long)
-                //            foreach (var c in Coordenadas_Hueco)
-                //            {
-                //                B.Add(c);
-                //            }
-                //            //Guardar coordenadas del poligono en un vector de coordenadas NetTopologySuite
-                //            int maxx = Coordenadas_Hueco.Count();
-                //            Coordinate[] Coordenadess = new Coordinate[maxx];
-                //            int ii = 0;
-                //            while (ii < maxx)
-                //            {
-                //                Coordenadess[ii] = new Coordinate(B[ii].Longitude, B[ii].Latitude);
-                //                ii++;
-                //            }
-                //            //Crear poligono NetTopologySuite
-                //            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
-                //            Geometry poly_T_H = gff.CreatePolygon(Coordenadess); //Poligono a computar!
-                //            poly_T = poly_T.Difference(poly_T_H);
-                //        }
-                //    }
-
-                //    Poligonos.Add(poly_T); //Añadir poligono a la lista para generar cobertura
-                //}
 
                 List<Geometry> Poligonos = TraducirPoligono(H, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
 
-                Originales.Add(new Cobertura(Nombre.Split('-')[0], FL_IN, "original", Poligonos));
+                
+                Originales.Add(new Cobertura(Nombre_sin_fl, FL_IN, "original", Poligonos));
 
                 Console.WriteLine(Nombre);
                 NombresCargados.Add(Nombre);
@@ -515,6 +436,18 @@ namespace Berta
             }
 
             return Redundados;
+        }
+
+        public static void TestAreas()
+        {
+            List<Cobertura> Originales = new List<Cobertura>();
+            List<string> NombresCargados = new List<string>();
+            (Originales, NombresCargados) = Operaciones.CargarCoberturas(new DirectoryInfo("C:\\Users\\arnau\\Desktop\\Berta - Otros\\Copy\\IN\\TestAreas"), "FL050");
+
+            var UNM = Originales[0].Area_Operaciones.Area;
+            var DNM = Originales[1].Area_Operaciones.Area;
+            var TNM = Originales[2].Area_Operaciones.Area;
+
         }
     }
 }
