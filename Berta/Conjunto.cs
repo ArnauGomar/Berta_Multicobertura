@@ -21,12 +21,20 @@ namespace Berta
         public string Nombre_Resultado; //Nombre del resultado (dependiendo de la ultima operación ejecutada)
         ICollection<Geometry> Areas = new List<Geometry>(); //Areas de coberturas (privado)
         List<string> Nombres = new List<string>(); //Nombres de todas las coberturas del conjunto
-
-        //TEST
         public List<string> Combinaciones = new List<string>(); //Numero de combinaciones generadoras de intersecciones
+
+        /// <summary>
+        /// Constructor simple
+        /// </summary>
         public Conjunto()
         { }
 
+        /// <summary>
+        /// Constructor complejo
+        /// </summary>
+        /// <param name="Coberturas"></param>
+        /// <param name="ID"></param>
+        /// <param name="Fl"></param>
         public Conjunto(List<Cobertura> Coberturas, string ID, string Fl)
         {
             A_Operar = Coberturas;
@@ -35,6 +43,9 @@ namespace Berta
             EjecutarConstrucción();
         }// Extrae de las coberturas entradas las areas para poder trabajar con ellas, genera nombre (inicalmente en null)
 
+        /// <summary>
+        /// Extraer los nombres de cada cobertura
+        /// </summary>
         public void EjecutarConstrucción()
         {
             int i = 1;
@@ -54,10 +65,16 @@ namespace Berta
             Nombres = NN;
         }
 
+        /// <summary>
+        /// Generar combinaciones para ejecutar las intersecciones
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="items"></param>
+        /// <param name="count"></param>
+        /// <returns></returns>
         private IEnumerable<IEnumerable<T>> Permutaciones<T>(IEnumerable<T> items, int count)
         {
             //Count = numero de elementos que se quieren en la combinación
-
             int i = 0;
             foreach (var item in items)
             {
@@ -73,6 +90,9 @@ namespace Berta
             }
         }//Permutar nombres, retorna 
 
+        /// <summary>
+        /// Desestima las combinaciones que no darán un resultado (que su intersección no existe)
+        /// </summary>
         public void FiltrarCombinaciones()
         {
             int MultipleMax = A_Operar.Count; //El número de radares determina la cobertura múltiple máxima possible
@@ -104,100 +124,21 @@ namespace Berta
             }
         } //Elimina las combinaciones que no intersectan
 
-        public void FiltrarCombinaciones_Experimental()
-        {
-            int MultipleMax = A_Operar.Count; //El número de radares determina la cobertura múltiple máxima possible
-            while (MultipleMax > 1)
-            {
-                IEnumerable<IEnumerable<string>> GenCombinaciones = Permutaciones(Nombres, MultipleMax); //Extraer todas las combinaciones posibles (sin repetición) para cada lvl de multicoberutra
-                                                                                                         //llamado Combinación general
-                foreach (IEnumerable<string> Combinacion in GenCombinaciones)
-                {
-                    IEnumerable<IEnumerable<string>> GenCombinaciones_2 = Permutaciones(Combinacion, 2); //Ejecutar la combinación 2 a 2 de los participantes de la combinación general
-
-                    List<string> Primeros = new List<string>(); //Guardaremos las coberturas con ValorInt igual a 2 para ponerlas al principio de todas y asi forzar la intersección de estas dos al 
-                                                                //principio para intentar ahorrar tiempo. 
-
-                    bool Intersecciona = true;
-                    foreach (IEnumerable<string> Combinacion_2 in GenCombinaciones_2)
-                    {
-                        //Extraer indice en la lista de intersecciones del seegundo elemento de la combinación para mirar si intersecta con el primer elemento
-                        int IndexOfLast = A_Operar.IndexOf(A_Operar.Where(x => x.nombre == Combinacion_2.Last()).ToList()[0]);
-                        int ValorInt = A_Operar.Where(x => x.nombre == Combinacion_2.First()).ToList()[0].InterseccionesLista[IndexOfLast]; //Mirar intersección, 1 interseccion, 0 no intersección 
-                        if (ValorInt == 0) //El par no intersecciona por lo que no hay posibilidad de intersección real. 
-                        {
-                            Intersecciona = false;
-                            break;
-                        }
-                        else if (ValorInt == 2)
-                        {
-                            if (!Primeros.Contains(Combinacion_2.Last()))
-                                Primeros.Add(Combinacion_2.Last());
-                            if (!Primeros.Contains(Combinacion_2.First()))
-                                Primeros.Add(Combinacion_2.First());
-                        }
-
-                    }
-                    if (Intersecciona == true)
-                    {
-                        //Eliminar los elementos dentro de primeros de la combinación general
-                        List<string> Cmb = Combinacion.ToList();
-                        foreach (string nom in Primeros)
-                        {
-                            Cmb.RemoveAt(Cmb.IndexOf(nom));
-                        }
-                        Primeros.AddRange(Cmb);
-                        Combinaciones.Add(string.Join(" () ", Primeros));
-                    }
-
-                }
-                MultipleMax--;
-            }
-        }
-
+        /// <summary>
+        /// Ejecuta el proceso GenerarListaIntersectados de todas las coberturas dentro del conjunto
+        /// </summary>
         public void GenerarListasIntersecciones()
         {
             foreach (Cobertura cobertura in this.A_Operar)
             {
                 cobertura.GenerarListaIntersectados(this.A_Operar);
-                //cobertura.GenerarListaIntersectados_Experimental(this.A_Operar);
             }
         }
 
-        //Metodos geometricos
-        public Geometry Union()
-        {
-            CascadedPolygonUnion ExecutarUnion = new CascadedPolygonUnion(Areas);
-            var GEO = ExecutarUnion.Union(); //union ejecutada
-
-            return GEO;
-        }//ejecuta la union de todos las coberuras inscritas
-
-        public Geometry Intersección_Todos()
-        {
-            List<Geometry> N_Areas = Areas.ToList();
-            var GEO = N_Areas[0].Intersection(N_Areas[1]);
-
-            if (N_Areas.Count > 2)
-            {
-                int i = 2;
-                while (i < N_Areas.Count)
-                {
-                    GEO = GEO.Intersection(N_Areas[i]);
-                    i++;
-                }
-            }
-
-            return GEO;
-        } //Ejecuta la interseccion de todas las coberutras (obtener multicobertura mayor)
-
-        //Metodos tipologicos
-
-        public List<Cobertura> RetornarCoberturasOriginales()
-        {
-            return A_Operar;
-        }
-
+        /// <summary>
+        /// Ejecuta la unión de todo el conjunto para retornar la cobertura total (suma) de todas las coberturas del conjunto
+        /// </summary>
+        /// <returns></returns>
         public Cobertura FormarCoberturaTotal()
         {
             if (Areas.Count == 0)
@@ -212,6 +153,11 @@ namespace Berta
             return new Cobertura(Nombre_Resultado, this.FL, "total", GEO);
         } //Union de todas las coberturas
 
+        /// <summary>
+        /// Ejecuta las intersecciones siguiendo las combinaciones filtradas
+        /// </summary>
+        /// <param name="Umbral"></param>
+        /// <returns></returns>
         private List<Conjunto> FormarCoberturasMultiples_Paso1(double Umbral) //Conjuntos por lvl
         {
             List<Conjunto> Conjuntos = new List<Conjunto>(); //Guardaremos los conjuntos (por nivel) de multicoberturas
@@ -262,6 +208,11 @@ namespace Berta
             return Conjuntos;
         }
 
+        /// <summary>
+        /// Busca si existe cobertura máxima del conjunto (lvl max = num de coberturas)
+        /// </summary>
+        /// <param name="CoberturasPorLvl"></param>
+        /// <returns></returns>
         private (Cobertura, bool) FormarCoberturasMultiples_Paso2(List<Conjunto> CoberturasPorLvl) //Calcular cobertura máxima
         {
             int MultipleMax = this.A_Operar.Count; //El número de radares determina la cobertura múltiple máxima possible
@@ -282,6 +233,14 @@ namespace Berta
                 return (null, false);
         }
 
+        /// <summary>
+        /// Crea los anillos por nivel y aplica la diferencia de multi-coberturas de nivel superior a las sobrepuestas de nivel inferior.
+        /// </summary>
+        /// <param name="CoberturasPorLvl"></param>
+        /// <param name="CoberturaMAX"></param>
+        /// <param name="epsilon"></param>
+        /// <param name="Umbral"></param>
+        /// <returns></returns>
         private (Conjunto, List<Conjunto>) FormarCoberturasMultiples_Paso3(List<Conjunto> CoberturasPorLvl, bool CoberturaMAX, double epsilon, double Umbral) //Cálcula anillos de coberturas del mismo lvl
         {
             //Dos casos, hay multiple máx o no. Si la hay se ejecuta como en version Alpha
@@ -338,14 +297,6 @@ namespace Berta
                     var UnionLvl = Operaciones.ReducirPrecision(CoberturasPorLvl[j].FormarCoberturaTotal().Area_Operaciones);
 
                     Geometry Resta = UnionLvl.Difference(GEO_Resta);
-                    //Aplicar umbral al anillo (resta)
-                    foreach (Polygon TrozoAnillo in (MultiPolygon)Resta)
-                    {
-                        if (TrozoAnillo.Area >= Umbral)
-                            Verificados.Add(TrozoAnillo);
-                    }
-                    Resta = gff.CreateMultiPolygon(Verificados.ToArray());
-
                     TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl[j].A_Operar[0].tipo_multiple, Resta)); //Se crea el anillo
                     GEO_Resta = Operaciones.ReducirPrecision(GEO_Resta.Union(UnionLvl));
                     TotalPorLVL.RemoveAll(x => x.Area_Operaciones.IsEmpty == true);//Eliminamos coberturas vacias
@@ -364,18 +315,9 @@ namespace Berta
                 int j = 1;
                 while (j < CoberturasPorLvl.Count)
                 {
+                    //Crear anillo
                     var NewG = Operaciones.ReducirPrecision(CoberturasPorLvl[j].FormarCoberturaTotal().Area_Operaciones); //Ejecutamos unión de conjunto
                     Geometry Resta = NewG.Difference(GEO_Resta); //Hacemos la diferencia 
-
-                    //Aplicar umbral al anillo (resta)
-                    List<Polygon> Verificados = new List<Polygon>();
-                    foreach (Polygon TrozoAnillo in(MultiPolygon)Resta)
-                    {
-                        if (TrozoAnillo.Area >= Umbral)
-                            Verificados.Add(TrozoAnillo);
-                    }
-                    Resta = gff.CreateMultiPolygon(Verificados.ToArray());
-
                     TotalPorLVL.Add(new Cobertura("", this.FL, "multiple total", CoberturasPorLvl[j].A_Operar[0].tipo_multiple, Resta)); //Guardamos anillo resultante
 
                     foreach (Cobertura Cob in CoberturasPorLvl[j].A_Operar)
@@ -385,7 +327,6 @@ namespace Berta
                         var NewGeo = Operaciones.ReducirPrecision(CobRound.Difference(GEO_Resta));
                         if ((NewGeo.Area < epsilon) || (NewGeo.Area < Umbral))  //Eliminar geometrias sospechosas o eliminar geometrias discriminadas (se deja epsilon por si umbral se reduce mucho)
                         {
-                            
                             NewGeo = gff.CreateEmpty(Dimension.Curve);
                         }
                         else if (NewGeo.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
@@ -393,7 +334,7 @@ namespace Berta
                             //Eliminar geometrias sospechosas de un multipoligono
                             MultiPolygon Verificar = (MultiPolygon)NewGeo;
                             var Poligonos = Verificar.Geometries;
-                            Verificados = new List<Polygon>();
+                            List<Polygon> Verificados = new List<Polygon>();
 
                             foreach (Polygon Poly in Poligonos)
                             {
@@ -428,6 +369,12 @@ namespace Berta
                 return (null, CoberturasPorLvl); //El elemento totalPorLvl solo sera nulo en calculos de coberturas simples
         }
 
+        /// <summary>
+        /// Ejecuta los 3 steps del cálculo de multi-cobertura
+        /// </summary>
+        /// <param name="epsilon"></param>
+        /// <param name="Umbral"></param>
+        /// <returns></returns>
         public (List<Conjunto>, Conjunto, Cobertura) FormarCoberturasMultiples(double epsilon, double Umbral)
         {
             List<Conjunto> ConjuntosPorLvl = FormarCoberturasMultiples_Paso1(Umbral); //Ejecutar paso 1 
@@ -445,6 +392,14 @@ namespace Berta
                 return (ConjuntosPorLvl_F, Anillos, null); //Retornamos null la cobertura máxima
         }
 
+        /// <summary>
+        /// Calcula las coberturas simples del conjunto (de nivel 1), también crea el anillo simple. Retorna tambien el area comprendida por los niveles superiores
+        /// </summary>
+        /// <param name="TotalPorLvl"></param>
+        /// <param name="Max"></param>
+        /// <param name="epsilon_simple"></param>
+        /// <param name="Umbral"></param>
+        /// <returns></returns>
         public (Conjunto, Cobertura, Cobertura) FormarCoberturasSimples(Conjunto TotalPorLvl, Cobertura Max, double epsilon_simple, double Umbral)
         {
 
@@ -462,7 +417,11 @@ namespace Berta
                 if (TotalPorLvl != null) //El elemento totalPorLvl solo sera nulo en calculos de coberturas simples
                 {
                     foreach (Cobertura cob in TotalPorLvl.A_Operar)
-                        GEOt = Operaciones.ReducirPrecision(GEOt.Union(cob.Area_Operaciones));
+                    {
+                        Geometry C = cob.Area_Operaciones;
+                        var P_GEOt = GEOt.Union(C);
+                        GEOt = Operaciones.ReducirPrecision(P_GEOt);
+                    }
                 }
 
                 InterseccionTotal.ActualizarAreas(GEOt);
@@ -480,8 +439,18 @@ namespace Berta
                 InterseccionTotal.ActualizarAreas(GEOt);
             }
 
-            //Crear simple total
+            List<Polygon> Verificados = new List<Polygon>(); //Lista de verificación de poligonos
+            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //Factoria para crear multipoligonos
+
+            //Crear simple total y filtrar por umbral
             Cobertura SimplesTotal = new Cobertura("", this.FL, "simple total", FormarCoberturaTotal().Area_Operaciones.Difference(InterseccionTotal.Area_Operaciones));
+            foreach (Polygon TrozoAnillo in (MultiPolygon)SimplesTotal.Area_Operaciones)
+            {
+                if (TrozoAnillo.Area >= Umbral)
+                    Verificados.Add(TrozoAnillo);
+            }
+            SimplesTotal.ActualizarAreas(gff.CreateMultiPolygon(Verificados.ToArray()));
+
 
             //Restar para cada original la intersección total y asi obtener las coberutras simples 
             List<Cobertura> Ret = new List<Cobertura>();
@@ -490,9 +459,8 @@ namespace Berta
             {
                 var GEO = Operaciones.ReducirPrecision(COB.Area_Operaciones.Difference(InterseccionTotal.Area_Operaciones));
 
-                if (GEO.Area < epsilon_simple) //Eliminar geometrias sospechosas
+                if ((GEO.Area < epsilon_simple) || (GEO.Area < Umbral)) //Eliminar geometrias sospechosas y aplicar umbral
                 {
-                    var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                     GEO = gff.CreateEmpty(Dimension.Curve);
                 }
                 else if (GEO.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
@@ -500,11 +468,11 @@ namespace Berta
                     //Eliminar geometrias sospechosas de un multipoligono
                     MultiPolygon Verificar = (MultiPolygon)GEO;
                     var Poligonos = Verificar.Geometries;
-                    List<Polygon> Verificados = new List<Polygon>();
-                    var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                    Verificados = new List<Polygon>();
+                    gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                     foreach (Polygon Poly in Poligonos)
                     {
-                        if (Poly.Area > epsilon_simple)
+                        if ((Poly.Area > epsilon_simple) && (Poly.Area >= Umbral)) //Eliminar geometrias sospechosas y aplicar umbral
                         {
                             Verificados.Add(Poly);
                         }
@@ -523,6 +491,11 @@ namespace Berta
 
         } //coberturas simples (por cada radar y el conjunto de ellas) y intersección total (union de todo eso que no es múltiple)
 
+        /// <summary>
+        /// Aplica el filtro sacta a todo el conjunto
+        /// </summary>
+        /// <param name="SACTA"></param>
+        /// <returns></returns>
         public Conjunto Aplicar_SACTA(Cobertura SACTA)
         {
             List<Cobertura> Filtradas = new List<Cobertura>();

@@ -21,12 +21,20 @@ namespace Berta
 
         public List<int> InterseccionesLista = new List<int>(); //Lista de 0,1 (y -1 cuando es la misma cobertura) para definir la intersección entre esta cobertura y las otras de un conjunto
 
-        //public string nombre_Archivo;
-
         //Constructores
+        /// <summary>
+        /// Constructor simple
+        /// </summary>
         public Cobertura()
         { } //Simple
 
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="Nombre"></param>
+        /// <param name="Fl"></param>
+        /// <param name="Tipo"></param>
+        /// <param name="Poligono"></param>
         public Cobertura(string Nombre, string Fl, string Tipo, Geometry Poligono)
         {
             nombre = Nombre; ;
@@ -37,6 +45,13 @@ namespace Berta
 
         } //tipo simple, original, total. CASO SIMPLE
 
+        /// <summary>
+        /// Constructor con múltiples poligonos
+        /// </summary>
+        /// <param name="Nombre"></param>
+        /// <param name="Fl"></param>
+        /// <param name="Tipo"></param>
+        /// <param name="Poligono"></param>
         public Cobertura(string Nombre, string Fl, string Tipo, List<Geometry> Poligono)
         {
             nombre = Nombre; ;
@@ -57,6 +72,14 @@ namespace Berta
             }
         } //tipo simple, original, total. CASO MULTIPOLIGONO
 
+        /// <summary>
+        /// Constructor tipo multiple
+        /// </summary>
+        /// <param name="Nombre"></param>
+        /// <param name="Fl"></param>
+        /// <param name="Tipo"></param>
+        /// <param name="Tipo_Multiple"></param>
+        /// <param name="Poligono"></param>
         public Cobertura(string Nombre, string Fl, string Tipo, int Tipo_Multiple, Geometry Poligono)
         {
             nombre = Nombre; ;
@@ -66,48 +89,6 @@ namespace Berta
 
             Area_Operaciones = Poligono;
         } //tipo multiple
-
-        public Cobertura(string Nombre, string Fl, string Tipo, List<Geometry> Poligono, List<Geometry> Huecos)
-        {
-            nombre = Nombre; ;
-            FL = Fl;
-            tipo = Tipo;
-
-            Geometry BASE;
-            if (Poligono.Count == 1) //Si en la lista de poligonos solo hay uno lo guardamos directamente
-                BASE = Poligono.First();
-            else //Si hay más de uno ejecutamos la union
-            {
-                ICollection<Geometry> Areas = new List<Geometry>(); //La clase CascadedPolygonUnion requiere de un ICollection
-
-                foreach (Geometry c in Poligono)
-                    Areas.Add(c);
-
-                CascadedPolygonUnion ExecutarUnion = new CascadedPolygonUnion(Areas); //Se crea clase para ejecutar la unón
-                BASE = ExecutarUnion.Union(); //geometria a retornar 
-            }
-
-            Geometry TRAMA;
-            //Juntar todos los huecos 
-            if (Huecos.Count == 1) //Si en la lista de poligonos solo hay uno lo guardamos directamente
-                TRAMA = Poligono.First();
-            else //Si hay más de uno ejecutamos la union
-            {
-                ICollection<Geometry> Areas = new List<Geometry>(); //La clase CascadedPolygonUnion requiere de un ICollection
-
-                foreach (Geometry c in Huecos)
-                    Areas.Add(c);
-
-                CascadedPolygonUnion ExecutarUnion = new CascadedPolygonUnion(Areas); //Se crea clase para ejecutar la unón
-                TRAMA = ExecutarUnion.Union(); //geometria a retornar 
-            }
-
-            //Ejecutar diferencia para encontrar cobertura final
-            Area_Operaciones = BASE.Difference(TRAMA);
-
-        } //gen original con huecos
-
-        //Metodos
 
         /// <summary>
         /// Guardaremos en una lista las intersecciones de la cobertura con un conjunto. 1 Intersecta, 0 No intersecta, -1 Misma cobertura
@@ -129,29 +110,6 @@ namespace Berta
                     InterseccionesLista.Add(0);
             }
         } //Lista de intersecciones 
-
-        public void GenerarListaIntersectados_Experimental(List<Cobertura> A_Operar)
-        {
-            //Guardaremos en una lista las intersecciones de la cobertura con un conjunto. 1 Intersecta, 0 No intersecta, -1 Misma cobertura
-            //Esta en orden de indices del A_Operar del conjuntoMadre (orden de carga)
-            foreach (Cobertura cobertura in A_Operar)
-            {
-                Geometry G = Operaciones.ReducirPrecision(cobertura.Area_Operaciones);
-                if (Operaciones.ReducirPrecision(this.Area_Operaciones).EqualsExact(G, 0.1))
-                    InterseccionesLista.Add(-1);
-                else
-                {
-                    double Area = Operaciones.ReducirPrecision(this.Area_Operaciones).Intersection(G).Area;
-                    if (Area >= 1)
-                        InterseccionesLista.Add(1); //Interseccion no supervisada
-                    else if ((Area < 0.499) && (Area != 0))
-                        InterseccionesLista.Add(2); //Interseccion supervisada
-                    else
-                        InterseccionesLista.Add(0); //Sin intersección
-                }
-
-            }
-        } //Lista de intersecciones (metodo intersección supervisada)
 
         /// <summary>
         /// Actualización de area_operaciones
@@ -595,7 +553,7 @@ namespace Berta
                 kmlfile.Save(stream);
             }
 
-            return "exportado a " + Path.Combine(@".\" + carpeta + "", nombre + "_" + tipo + ".kmz") + "";
+            return Path.Combine(@".\" + carpeta + "", nombre +".kmz") + "";
         } //Crea un KML SOLO con la cobertura asociada. Herramienta útil para la visualización durante el dev
     }
 }

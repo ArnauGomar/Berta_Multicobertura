@@ -17,6 +17,14 @@ namespace Berta
     /// </summary>
     public static class Operaciones
     {
+        /// <summary>
+        /// Metodo para exportar un KMZ con los cálculos.
+        /// </summary>
+        /// <param name="Doc"></param>
+        /// <param name="NombreDoc"></param>
+        /// <param name="carpeta"></param>
+        /// <param name="Destino"></param>
+        /// <returns></returns>
         public static int CrearKML_KMZ(SharpKml.Dom.Document Doc, string NombreDoc, string carpeta, string Destino)
         {
             string path = Path.Combine(Path.Combine(@".\" + carpeta + "", NombreDoc + ".kml"));
@@ -86,8 +94,15 @@ namespace Berta
             }
 
 
-        } //creamos un KML nuevo y se guarda en carpeta asignada (temporales). Después se crea un KMZ y se guarda en la carpeta asignada.
+        }
 
+        /// <summary>
+        /// Método 1 de Ramer-Douglas-Peucker line simplification
+        /// </summary>
+        /// <param name="pt"></param>
+        /// <param name="lineStart"></param>
+        /// <param name="lineEnd"></param>
+        /// <returns></returns>
         private static double PerpendicularDistance(Point pt, Point lineStart, Point lineEnd)
         {
             double dx = lineEnd.Item1 - lineStart.Item1;
@@ -113,6 +128,12 @@ namespace Berta
             return Math.Sqrt(ax * ax + ay * ay);
         } //Método 1 de Ramer-Douglas-Peucker line simplification
 
+        /// <summary>
+        /// Método 2 de Ramer-Douglas-Peucker line simplification
+        /// </summary>
+        /// <param name="pointList"></param>
+        /// <param name="epsilon"></param>
+        /// <param name="output"></param>
         private static void RamerDouglasPeucker(List<Point> pointList, double epsilon, List<Point> output)
         {
             if (pointList.Count < 2)
@@ -158,6 +179,12 @@ namespace Berta
             }
         } //Método 2 de Ramer-Douglas-Peucker line simplification
 
+        /// <summary>
+        /// //Aplica el algoritmo RamerDouglasPeucker
+        /// </summary>
+        /// <param name="C"></param>
+        /// <param name="Epsilon"></param>
+        /// <returns></returns>
         public static Geometry AplicarRamerDouglasPeucker(Coordinate[] C, double Epsilon)
         {
 
@@ -191,6 +218,11 @@ namespace Berta
             return polyOut;
         } //Aplica el algoritmo RamerDouglasPeucker
 
+        /// <summary>
+        /// Reduce la precisión (número de decimales de las coordenadas) de una geometria en concreto.
+        /// </summary>
+        /// <param name="geom"></param>
+        /// <returns></returns>
         public static Geometry ReducirPrecision(Geometry geom)
         {
             var pm = new PrecisionModel(10000); //10000
@@ -200,6 +232,12 @@ namespace Berta
             return reducedGeom;
         } //Reducción de precisión de las coordenadas de los poligonos
 
+        /// <summary>
+        /// Guarda los datos del CvsM, epsilon y epsilon_simple en un txt
+        /// </summary>
+        /// <param name="CvsM"></param>
+        /// <param name="epsilon"></param>
+        /// <param name="epsilon_simple"></param>
         public static void GuardarAjustes(int CvsM, double epsilon, double epsilon_simple)
         {
             StreamWriter W = new StreamWriter("Ajustes.txt");
@@ -209,6 +247,12 @@ namespace Berta
             W.Close();
         } //Guarda los datos del CvsM, epsilon (multiple) y epsilon_simple en el txt
 
+        /// <summary>
+        /// Lee un fichero KML/KMZ para extraer las coberturas (geometrias) que contiene
+        /// </summary>
+        /// <param name="DI"></param>
+        /// <param name="FL_IN"></param>
+        /// <returns></returns>
         public static (List<Cobertura>,List<string>) CargarCoberturas (DirectoryInfo DI, string FL_IN)
         {
             List<Cobertura> Originales = new List<Cobertura>(); //Lista a retornar, coberturas
@@ -255,6 +299,11 @@ namespace Berta
             return (Originales, NombresCargados);
         } //Carga las coberturas del fichero KML/KMZ
 
+        /// <summary>
+        /// Descomprime un archivo KMZ 
+        /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
         public static (FileStream,string) AbrirKMLdeKMZ (string path)
         {
             //Eliminar todo dentro de carpeta temporal
@@ -288,6 +337,12 @@ namespace Berta
             return (H,Nombre);
         }
 
+        /// <summary>
+        /// Traduce un objeto polygon de la libreria SharpKML a un objeto de la libreria NetTopologySuite
+        /// </summary>
+        /// <param name="H"></param>
+        /// <param name="FileName"></param>
+        /// <returns></returns>
         public static List<Geometry> TraducirPoligono (FileStream H, string FileName)
         {
             KmlFile F = KmlFile.Load(H); //Cargar KML
@@ -364,6 +419,14 @@ namespace Berta
             return Poligonos;
         }
 
+        /// <summary>
+        /// Reordena los resultados para mostrar por radar y no por nivel.
+        /// </summary>
+        /// <param name="conjunto"></param>
+        /// <param name="CoberturasSimples"></param>
+        /// <param name="Listado_ConjuntoCoberturasMultiples"></param>
+        /// <param name="CoberturaMaxima"></param>
+        /// <returns></returns>
         public static SharpKml.Dom.Folder CarpetaRedundados(Conjunto conjunto, Conjunto CoberturasSimples, List<Conjunto> Listado_ConjuntoCoberturasMultiples, Cobertura CoberturaMaxima)
         {
             SharpKml.Dom.Folder Redundados = new SharpKml.Dom.Folder { Id = "Redundantes", Name = "Multi-cobertura por radar", Visibility = false }; //Carpeta donde se guardaran los resultados radar a radar
@@ -438,16 +501,167 @@ namespace Berta
             return Redundados;
         }
 
-        public static void TestAreas()
+        /// <summary>
+        /// Parte del menú del cálculo de multi-cobertura que pregunta por el FL
+        /// </summary>
+        /// <returns></returns>
+        public static string Menu_FL() //Preguntar FL
         {
-            List<Cobertura> Originales = new List<Cobertura>();
-            List<string> NombresCargados = new List<string>();
-            (Originales, NombresCargados) = Operaciones.CargarCoberturas(new DirectoryInfo("C:\\Users\\arnau\\Desktop\\Berta - Otros\\Copy\\IN\\TestAreas"), "FL050");
+            bool FL_correcto = false;
+            string FL_IN = null;
+            while (!FL_correcto)
+            {
+                Console.Clear();
+                Console.WriteLine("Berta T");
+                Console.WriteLine();
+                Console.WriteLine("1 - Cálculo de multi-coberturas");
+                Console.WriteLine();
+                Console.WriteLine("FL seleccionado (p.e.: FL100 / FL090):");
 
-            var UNM = Originales[0].Area_Operaciones.Area;
-            var DNM = Originales[1].Area_Operaciones.Area;
-            var TNM = Originales[2].Area_Operaciones.Area;
+                //Obtener el FL
+                FL_IN = Console.ReadLine();
+                List<char> chars = new List<char>();
+                foreach (char c in FL_IN)
+                {
+                    chars.Add(c);
+                }
 
+                long N = 0; //Comprobar que el FL es correcto, solo si lo es el programa seguira
+                if ((chars[0] == 'F') && (chars[1] == 'L') && (long.TryParse(chars[2].ToString(), out N)) && (long.TryParse(chars[3].ToString(), out N)) && (long.TryParse(chars[4].ToString(), out N)))
+                    FL_correcto = true;
+                else
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("El FL indicado no es correcto");
+                    Console.ReadLine();
+                }
+            }
+
+            return FL_IN;
         }
+
+        /// <summary>
+        /// Parte del menú del cálculo de multi-cobertura que pregunta por el directorio de entrada
+        /// </summary>
+        /// <param name="FL"></param>
+        /// <returns></returns>
+        public static (DirectoryInfo, string) Menu_DirectorioIN(string FL) //Preguntar directiorio de entrada
+        {
+            Console.WriteLine();
+            string Directorio_IN = null;
+            DirectoryInfo DI = new DirectoryInfo(@".\Temporal");
+            bool Correcto = false;
+            while (!Correcto)
+            {
+                Console.WriteLine("Directorio de entrada");
+                Directorio_IN = Console.ReadLine();
+                DI = new DirectoryInfo(Directorio_IN);
+                try
+                {
+                    int control = DI.GetFiles().Count();
+                    if (control != 0)
+                        Correcto = true;
+                }
+                catch
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Error con el directorio de entrada");
+                    Console.ReadLine();
+                    Console.Clear();
+                    Console.WriteLine("Berta T");
+                    Console.WriteLine();
+                    Console.WriteLine("1 - Cálculo de multi-coberturas");
+                    Console.WriteLine();
+                    Console.WriteLine("FL seleccionado: " + FL);
+                    Console.WriteLine();
+                }
+            }
+
+            return (DI, Directorio_IN);
+        }
+
+        /// <summary>
+        /// Parte del menú del cálculo de multi-cobertura que pregunta por el umbral de discriminación
+        /// </summary>
+        /// <param name="Trans"></param>
+        /// <returns></returns>
+        public static double Menu_Umbral(double Trans) //Pregunta por el umbral
+        {
+            Console.WriteLine();
+            Console.WriteLine("Introducir el umbral de discriminación de areas [NM^2] (Predeterminado: 1 NM^2)");
+            string NM_Umbral = Console.ReadLine();
+            double Umbral_Areas = 1 * Trans;
+            if (NM_Umbral != "")
+            {
+                try
+                {
+                    Umbral_Areas = Convert.ToDouble(NM_Umbral) * Trans;
+                }
+                catch
+                {
+                    Console.WriteLine("Formato incorrecto, se usará el umbral predeterminado (1 NM^2)");
+                    Console.ReadLine();
+                }
+            }
+
+            return Umbral_Areas;
+        }
+
+        /// <summary>
+        /// Parte del menú del cálculo de multi-cobertura que pregunta por el directorio de salida
+        /// </summary>
+        /// <param name="Directorio_IN"></param>
+        /// <param name="Umbral_Areas"></param>
+        /// <param name="Trans"></param>
+        /// <param name="NombresCargados"></param>
+        /// <param name="Segs"></param>
+        /// <param name="TiempoEjecución_Parte2"></param>
+        /// <param name="NombreProyecto"></param>
+        /// <returns></returns>
+        public static string Menu_DirectorioOUT(string Directorio_IN, double Umbral_Areas, double Trans, List<string> NombresCargados, double Segs, TimeSpan TiempoEjecución_Parte2, string NombreProyecto) //Preguntar directiorio de entrada
+        {
+            Console.WriteLine();
+            string Directorio_OUT = null;
+            DirectoryInfo DO = new DirectoryInfo(@".\Temporal");
+            bool Correcto = false;
+            while (!Correcto)
+            {
+                Console.WriteLine("Directorio de salida");
+                Directorio_OUT = Console.ReadLine();
+                DO = new DirectoryInfo(Directorio_OUT);
+                try
+                {
+                    DO.GetFiles().Count();
+                    Correcto = true;
+                }
+                catch
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Error con el directorio de salida");
+                    Console.ReadLine();
+                    Console.Clear();
+                    Console.WriteLine("Berta T");
+                    Console.WriteLine();
+                    Console.WriteLine("1 - Cálculo de multi-coberturas");
+                    Console.WriteLine();
+                    Console.WriteLine("Directorio de entrada: " + Directorio_IN);
+                    Console.WriteLine();
+                    Console.WriteLine("Umbral de discriminación: " + Math.Round(Umbral_Areas / Trans, 3) + " NM^2");
+                    Console.WriteLine();
+                    Console.WriteLine("Archivos cargados:");
+                    Console.WriteLine();
+                    foreach (string N in NombresCargados)
+                        Console.WriteLine(N);
+                    Console.WriteLine();
+                    Console.WriteLine("Tiempo de ejecución: " + Math.Round(TiempoEjecución_Parte2.TotalSeconds / 60, 0) + " minutos " + Segs + " segundos");
+                    Console.WriteLine();
+                    Console.WriteLine("Nombre del proyecto: " + NombreProyecto);
+                    Console.WriteLine();
+                }
+            }
+
+            return Directorio_OUT;
+        }
+
     }
 }

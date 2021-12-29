@@ -106,7 +106,7 @@ namespace Berta
                         TimeSpan TiempoEjecución_Parte2 = new TimeSpan(); //Variable para guardar el tiempo de ejecución. 
 
                         bool parte1 = false; //Control de parte1, si no se ha ejecutado correctamente la parte 1 la parte 2 no sucede.
-                        try //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
+                        //try //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
                         {
                             //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
 
@@ -115,50 +115,13 @@ namespace Berta
                             if (CvsM == 0) //Modo menú
                             {
                                 //1.1 - FL
-                                bool FL_correcto = false;
-                                while (!FL_correcto)
-                                {
-                                    Console.Clear();
-                                    Console.WriteLine("Berta T");
-                                    Console.WriteLine();
-                                    Console.WriteLine("1 - Cálculo de multi-coberturas");
-                                    Console.WriteLine();
-                                    Console.WriteLine("FL seleccionado (p.e.: FL100 / FL090):");
-
-                                    //Obtener el FL
-                                    FL_IN = Console.ReadLine();
-                                    List<char> chars = new List<char>();
-                                    foreach (char c in FL_IN)
-                                    {
-                                        chars.Add(c);
-                                    }
-
-                                    long N = 0; //Comprobar que el FL es correcto, solo si lo es el programa seguira
-                                    if ((chars[0] == 'F') && (chars[1] == 'L') && (long.TryParse(chars[2].ToString(), out N)) && (long.TryParse(chars[3].ToString(), out N)) && (long.TryParse(chars[4].ToString(), out N)))
-                                        FL_correcto = true;
-                                    else
-                                    {
-                                        Console.WriteLine();
-                                        Console.WriteLine("El FL indicado no es correcto");
-                                        Console.ReadLine();
-                                    }
-                                }
+                                FL_IN = Operaciones.Menu_FL();
 
                                 //1.2 - Entrada
-                                Console.WriteLine();
-                                Console.WriteLine("Directorio de entrada");
-                                Directorio_IN = Console.ReadLine();
-                                Console.WriteLine();
-                                DI = new DirectoryInfo(Directorio_IN); //Abrimos carpeta in para leer archivos
+                                (DI, Directorio_IN) = Operaciones.Menu_DirectorioIN(FL_IN);
 
                                 //1.2.2 Entrada umbral de filtro (1NM de forma predeterminada)
-                                Console.WriteLine();
-                                Console.WriteLine("Introducir el umbral de discriminación de areas [NM^2] (Predeterminado: 1 NM^2)");
-                                string NM_Umbral = Console.ReadLine();
-                                if(NM_Umbral!="")
-                                {
-                                    Umbral_Areas = Convert.ToDouble(NM_Umbral) * Trans;
-                                }
+                                Umbral_Areas = Operaciones.Menu_Umbral(Trans);
 
                             }//Modo menú
                             else//Modo comando
@@ -251,6 +214,19 @@ namespace Berta
                                 //Coberturas simples
                                 (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Anillos, CoberturaMaxima, epsilon_simple, Umbral_Areas); //Cálculo coberturas simples
 
+                                //FILTRAR AQUI ANILLOS (EVITAR ERRORES EN COBERTURA SIMPLE, POLIGONOS NO VÁLIDOS)
+                                foreach (Cobertura anillo in Anillos.A_Operar)
+                                {
+                                    List<Polygon> Verificados = new List<Polygon>(); //Lista de verificación de poligonos
+                                    var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //Factoria para crear multipoligonos
+                                    foreach (Polygon TrozoAnillo in (MultiPolygon)anillo.Area_Operaciones)
+                                    {
+                                        if (TrozoAnillo.Area >= Umbral_Areas)
+                                            Verificados.Add(TrozoAnillo);
+                                    }
+                                    anillo.ActualizarAreas(gff.CreateMultiPolygon(Verificados.ToArray()));
+                                }
+
                                 //Añadir coberturas simples (crear carpeta)
                                 var folder_Simples = new SharpKml.Dom.Folder();
                                 folder_Simples.Visibility = false;
@@ -317,11 +293,11 @@ namespace Berta
                             }
                         }
 
-                        catch (Exception e)
-                        {
-                            Console.WriteLine(e.Message);
-                            Console.ReadLine();
-                        } //Parte1 - Cargar ficheros de entrada, FL y ejecutar cálculos
+                        //catch (Exception e)
+                        //{
+                        //    Console.WriteLine(e.Message);
+                        //    Console.ReadLine();
+                        //} //Parte1 - Cargar ficheros de entrada, FL y ejecutar cálculos
 
                         if (parte1) //Si y solo si la parte1 ha sido ejecutada con éxito ejecutamos la parte2
                         {
@@ -393,12 +369,12 @@ namespace Berta
                                 Console.WriteLine();
                                 Console.WriteLine("Nombre del proyecto: " + NombreProyecto);
                                 Console.WriteLine();
-                                Console.WriteLine();
 
                                 //2.3 - Directorio de salida
-                                Console.WriteLine("Directorio de salida");
-                                string Directorio_OUT = Console.ReadLine();
-                                Console.WriteLine();
+                                string Directorio_OUT = Operaciones.Menu_DirectorioOUT(Directorio_IN, Umbral_Areas, Trans, NombresCargados, Segs, TiempoEjecución_Parte2, NombreProyecto);
+                                //Console.WriteLine("Directorio de salida");
+                                //string Directorio_OUT = Console.ReadLine();
+                                //Console.WriteLine();
 
                                 //2.4 - Exportar proyecto
                                 int Control = Operaciones.CrearKML_KMZ(Doc, NombreProyecto, "Temporal", Directorio_OUT); //Se crea un kml temporal para después crear KMZ
