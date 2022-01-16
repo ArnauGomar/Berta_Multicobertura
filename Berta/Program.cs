@@ -174,7 +174,7 @@ namespace Berta
                                 Console.WriteLine();
                                 Console.WriteLine("Inicio del cáclulo...");
                                 Stopwatch stopwatch = Stopwatch.StartNew(); //Reloj para conocer el tiempo de ejecución
-                                conjunto.GenerarListasIntersecciones();
+                                //conjunto.GenerarListasIntersecciones();
                                 conjunto.FiltrarCombinaciones(); //Eliminamos las combinaciones que no van a generar una intersección
                                                                  //conjunto.FiltrarCombinaciones_Experimental();
                                 stopwatch.Stop();
@@ -215,17 +215,24 @@ namespace Berta
                                 (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Anillos, CoberturaMaxima, epsilon_simple, Umbral_Areas); //Cálculo coberturas simples
 
                                 //FILTRAR AQUI ANILLOS (EVITAR ERRORES EN COBERTURA SIMPLE, POLIGONOS NO VÁLIDOS)
-                                foreach (Cobertura anillo in Anillos.A_Operar)
+                                if(Anillos!=null)
                                 {
-                                    List<Polygon> Verificados = new List<Polygon>(); //Lista de verificación de poligonos
-                                    var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //Factoria para crear multipoligonos
-                                    foreach (Polygon TrozoAnillo in (MultiPolygon)anillo.Area_Operaciones)
+                                    foreach (Cobertura anillo in Anillos.A_Operar)
                                     {
-                                        if (TrozoAnillo.Area >= Umbral_Areas)
-                                            Verificados.Add(TrozoAnillo);
+                                        List<Polygon> Verificados = new List<Polygon>(); //Lista de verificación de poligonos
+                                        var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //Factoria para crear multipoligonos
+                                        if (anillo.Area_Operaciones.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
+                                        {
+                                            foreach (Polygon TrozoAnillo in (MultiPolygon)anillo.Area_Operaciones)
+                                            {
+                                                if (TrozoAnillo.Area >= Umbral_Areas)
+                                                    Verificados.Add(TrozoAnillo);
+                                            }
+                                            anillo.ActualizarAreas(gff.CreateMultiPolygon(Verificados.ToArray()));
+                                        }
                                     }
-                                    anillo.ActualizarAreas(gff.CreateMultiPolygon(Verificados.ToArray()));
                                 }
+                                
 
                                 //Añadir coberturas simples (crear carpeta)
                                 var folder_Simples = new SharpKml.Dom.Folder();
@@ -249,9 +256,12 @@ namespace Berta
                                     folder_lvl.Id = "Multi-Cobertura-" + string.Format("{0:00}", Lvl);
 
                                     //Buscar anillo correspondiente al lvl 
-                                    var anillo = Anillos.A_Operar.Where(x => x.tipo_multiple == Lvl).ToList()[0];
-                                    folder_lvl.AddFeature(anillo.CrearDocumentoSharpKML());
-
+                                    if(Anillos!=null)
+                                    {
+                                        var anillo = Anillos.A_Operar.Where(x => x.tipo_multiple == Lvl).ToList()[0];
+                                        folder_lvl.AddFeature(anillo.CrearDocumentoSharpKML());
+                                    }
+                                    
                                     //Añadir multicoberturas
                                     foreach (Cobertura cob in con.A_Operar)
                                         folder_lvl.AddFeature(cob.CrearDocumentoSharpKML());
@@ -388,7 +398,7 @@ namespace Berta
                                 }
                                 else
                                 {
-                                    Console.WriteLine("Directorio de destino no válido");
+                                    Console.WriteLine("Directorio de destino no válido, no puede contener puntos (.)");
                                     Console.WriteLine();
                                     Console.WriteLine("Enter para continuar");
                                     Console.ReadLine();
@@ -404,10 +414,12 @@ namespace Berta
                             Console.WriteLine("Berta T");
                             Console.WriteLine();
                             Console.WriteLine("2 - Filtrado SACTA");
-                            Console.WriteLine();
-                            Console.WriteLine("Directorio de cobertura a filtrar:");
-                            string path_Cob = Console.ReadLine();
-                            DirectoryInfo Directorio_Cobertura = new DirectoryInfo(path_Cob);
+                            //Console.WriteLine();
+                            //Console.WriteLine("Directorio de cobertura a filtrar:");
+                            //string path_Cob = Console.ReadLine();
+                            //DirectoryInfo Directorio_Cobertura = new DirectoryInfo(path_Cob);
+
+                            (DirectoryInfo Directorio_Cobertura, string path_Cob) = Operaciones.Menu_DirectorioIN_SACTA();
 
                             //Si solo hay un solo archivo en la carpeta se cargará ese, sinó se le dara al usuarió la oportunidad de elegir cual.
                             //También puede seleccionar la opción de ejecutar el filtro sobre todos los archivos de la carpeta
@@ -417,6 +429,14 @@ namespace Berta
 
                             //Cargar todos los archivos de la carpeta
                             (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null);
+
+                            //Actualizar nombres en coberturas (FL)
+                            int i = 0;
+                            foreach(Cobertura cob in Coberturas)
+                            {
+                                cob.FL = NombresCargados[i].Split('-')[1];
+                                i++;
+                            }
 
                             if (Directorio_Cobertura.GetFiles().Count()>=1) //Minimo un archivo
                             {
@@ -435,7 +455,7 @@ namespace Berta
                                         Console.WriteLine();
                                         Console.WriteLine("Archivos en carpeta:");
                                         Console.WriteLine();
-                                        int i = 1;
+                                        i = 1;
                                         foreach (var file in Directorio_Cobertura.GetFiles())
                                         {
                                             Console.WriteLine("" + i + " - " + file.Name);
@@ -455,8 +475,9 @@ namespace Berta
                                         {
                                             Console.WriteLine();
                                             Console.WriteLine("Directorio de cobertura a filtrar:");
-                                            path_Cob = Console.ReadLine();
-                                            Directorio_Cobertura = new DirectoryInfo(path_Cob);
+                                            //path_Cob = Console.ReadLine();
+                                            //Directorio_Cobertura = new DirectoryInfo(path_Cob);
+                                            (Directorio_Cobertura,  path_Cob) = Operaciones.Menu_DirectorioIN_SACTA();
                                             (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null); //Cargamos coberturas de los archivos de esa carpeta
                                             //Seguimos con el bucle
                                         }
@@ -493,26 +514,29 @@ namespace Berta
                             try
                             {
                                 //Obtenemos el filtro SACTA
-                                Console.Clear();
-                                Console.WriteLine("Berta T");
-                                Console.WriteLine();
-                                Console.WriteLine("2 - Filtrado SACTA");
-                                Console.WriteLine();
-                                Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
-                                Console.WriteLine();
-                                Console.WriteLine("Archivos cargados:");
-                                foreach (string Nom in NombresCargados)
-                                {
-                                    Console.WriteLine(Nom);
-                                }
-                                Console.WriteLine();
-                                Console.WriteLine("Directorio completo del kmz con el filtro SACTA:");
-                                string path_SACTA = Console.ReadLine();
+                                //Console.Clear();
+                                //Console.WriteLine("Berta T");
+                                //Console.WriteLine();
+                                //Console.WriteLine("2 - Filtrado SACTA");
+                                //Console.WriteLine();
+                                //Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
+                                //Console.WriteLine();
+                                //Console.WriteLine("Archivos cargados:");
+                                //foreach (string Nom in NombresCargados)
+                                //{
+                                //    Console.WriteLine(Nom);
+                                //}
+                                //Console.WriteLine();
+                                //Console.WriteLine("Directorio completo del kmz con el filtro SACTA:");
+                                //string path_SACTA = Console.ReadLine();
 
-                                //Abrir KML
-                                (FileStream H, string Nombre) = Operaciones.AbrirKMLdeKMZ(path_SACTA);
-                                List<Geometry> Poligonos = Operaciones.TraducirPoligono(H, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
-                                Cobertura Filtro_SACTA = new Cobertura("Filtro", "FL999", "original", Poligonos); //Cobertura donde guardaremos el filtro SACTA seleccionado
+                                ////Abrir KML
+                                //(FileStream H, string Nombre) = Operaciones.AbrirKMLdeKMZ(path_SACTA);
+                                //List<Geometry> Poligonos = Operaciones.TraducirPoligono(H, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
+                                //Cobertura Filtro_SACTA = new Cobertura("Filtro", "FL999", "original", Poligonos); //Cobertura donde guardaremos el filtro SACTA seleccionado
+
+                                //Cargar filtro SACTA
+                                (Cobertura Filtro_SACTA, string path_SACTA) = Operaciones.Menu_DirectorioSACTA_SACTA(NombresCargados, path_Cob);
 
                                 //Ejecutar filtrado
                                 Conjunto Filtrado = conjuntoAfiltrar.Aplicar_SACTA(Filtro_SACTA);
@@ -545,7 +569,7 @@ namespace Berta
                                         }
                                         else
                                         {
-                                            Console.WriteLine("Directorio de destino no válido");
+                                            Console.WriteLine("Directorio de destino no válido, no puede contener puntos (.)");
                                             Console.WriteLine();
                                             Console.WriteLine("Enter para continuar");
                                             Console.ReadLine();

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Berta
@@ -18,9 +19,6 @@ namespace Berta
         public List<Cobertura> A_Operar = new List<Cobertura>(); //Lista de coberturas
         public string Identificador; //Identificador (opcional)
         public string FL; //FL del conjunto
-        public string Nombre_Resultado; //Nombre del resultado (dependiendo de la ultima operación ejecutada)
-        ICollection<Geometry> Areas = new List<Geometry>(); //Areas de coberturas (privado)
-        List<string> Nombres = new List<string>(); //Nombres de todas las coberturas del conjunto
         public List<string> Combinaciones = new List<string>(); //Numero de combinaciones generadoras de intersecciones
 
         /// <summary>
@@ -40,30 +38,7 @@ namespace Berta
             A_Operar = Coberturas;
             Identificador = ID;
             FL = Fl;
-            EjecutarConstrucción();
         }// Extrae de las coberturas entradas las areas para poder trabajar con ellas, genera nombre (inicalmente en null)
-
-        /// <summary>
-        /// Extraer los nombres de cada cobertura
-        /// </summary>
-        public void EjecutarConstrucción()
-        {
-            int i = 1;
-            string N = A_Operar[0].nombre.Split('-')[0];
-            List<string> NN = new List<string>();
-            NN.Add(N);
-            Areas.Add(A_Operar[0].Area_Operaciones);
-
-            while (i < A_Operar.Count())
-            {
-                Areas.Add(A_Operar[i].Area_Operaciones);
-                NN.Add(A_Operar[i].nombre);
-                N = N + " () " + A_Operar[i].nombre.Split('-')[0];
-                i++;
-            }
-            Nombre_Resultado = N;
-            Nombres = NN;
-        }
 
         /// <summary>
         /// Generar combinaciones para ejecutar las intersecciones
@@ -72,7 +47,7 @@ namespace Berta
         /// <param name="items"></param>
         /// <param name="count"></param>
         /// <returns></returns>
-        private IEnumerable<IEnumerable<T>> Permutaciones<T>(IEnumerable<T> items, int count)
+        private IEnumerable<IEnumerable<T>> Combinacion<T>(IEnumerable<T> items, int count)
         {
             //Count = numero de elementos que se quieren en la combinación
             int i = 0;
@@ -82,7 +57,7 @@ namespace Berta
                     yield return new T[] { item };
                 else
                 {
-                    foreach (var result in Permutaciones(items.Skip(i + 1), count - 1))
+                    foreach (var result in Combinacion(items.Skip(i + 1), count - 1))
                         yield return new T[] { item }.Concat(result);
                 }
 
@@ -95,14 +70,27 @@ namespace Berta
         /// </summary>
         public void FiltrarCombinaciones()
         {
+            ProgressBar PB = new ProgressBar();
+
+            //Generar lista de interseccion dos a dos de cada cobertura
+            foreach (Cobertura cobertura in this.A_Operar)
+            {
+                cobertura.GenerarListaIntersectados(this.A_Operar);
+            }
+
             int MultipleMax = A_Operar.Count; //El número de radares determina la cobertura múltiple máxima possible
+
+            List<string> Nombres = new List<string>();
+            foreach (Cobertura c in this.A_Operar)
+                Nombres.Add(c.nombre);
+            int Pro = 1; int Max = MultipleMax;
             while (MultipleMax > 1)
             {
-                IEnumerable<IEnumerable<string>> GenCombinaciones = Permutaciones(Nombres, MultipleMax); //Extraer todas las combinaciones posibles (sin repetición) para cada lvl de multicoberutra
+                IEnumerable<IEnumerable<string>> GenCombinaciones = Combinacion(Nombres, MultipleMax); //Extraer todas las combinaciones posibles (sin repetición) para cada lvl de multicoberutra
                                                                                                          //llamado Combinación general
-                foreach (IEnumerable<string> Combinacion in GenCombinaciones)
+                foreach (IEnumerable<string> Combinacions in GenCombinaciones)
                 {
-                    IEnumerable<IEnumerable<string>> GenCombinaciones_2 = Permutaciones(Combinacion, 2); //Ejecutar la combinación 2 a 2 de los participantes de la combinación general
+                    IEnumerable<IEnumerable<string>> GenCombinaciones_2 = Combinacion(Combinacions, 2); //Ejecutar la combinación 2 a 2 de los participantes de la combinación general
 
                     bool Intersecciona = true;
                     foreach (IEnumerable<string> Combinacion_2 in GenCombinaciones_2)
@@ -118,22 +106,14 @@ namespace Berta
 
                     }
                     if (Intersecciona == true)
-                        Combinaciones.Add(string.Join(" () ", Combinacion));
+                        Combinaciones.Add(string.Join(" () ", Combinacions));
                 }
                 MultipleMax--;
+                PB.Report((double)Pro / Max);
+                Pro++;
             }
+            PB.Dispose();
         } //Elimina las combinaciones que no intersectan
-
-        /// <summary>
-        /// Ejecuta el proceso GenerarListaIntersectados de todas las coberturas dentro del conjunto
-        /// </summary>
-        public void GenerarListasIntersecciones()
-        {
-            foreach (Cobertura cobertura in this.A_Operar)
-            {
-                cobertura.GenerarListaIntersectados(this.A_Operar);
-            }
-        }
 
         /// <summary>
         /// Ejecuta la unión de todo el conjunto para retornar la cobertura total (suma) de todas las coberturas del conjunto
@@ -141,16 +121,26 @@ namespace Berta
         /// <returns></returns>
         public Cobertura FormarCoberturaTotal()
         {
-            if (Areas.Count == 0)
+            ICollection<Geometry> Areas = new List<Geometry>();
+
+            int i = 1;
+            string N = A_Operar[0].nombre.Split('-')[0];
+            List<string> NN = new List<string>();
+            NN.Add(N);
+            Areas.Add(A_Operar[0].Area_Operaciones);
+
+            while (i < A_Operar.Count())
             {
-                foreach (Cobertura c in A_Operar)
-                    Areas.Add(c.Area_Operaciones);
+                Areas.Add(A_Operar[i].Area_Operaciones);
+                NN.Add(A_Operar[i].nombre);
+                N = N + " () " + A_Operar[i].nombre.Split('-')[0];
+                i++;
             }
 
             CascadedPolygonUnion ExecutarUnion = new CascadedPolygonUnion(Areas);
             var GEO = ExecutarUnion.Union(); //geometria a retornar 
 
-            return new Cobertura(Nombre_Resultado, this.FL, "total", GEO);
+            return new Cobertura(N, this.FL, "total", GEO);
         } //Union de todas las coberturas
 
         /// <summary>
@@ -161,7 +151,10 @@ namespace Berta
         private List<Conjunto> FormarCoberturasMultiples_Paso1(double Umbral) //Conjuntos por lvl
         {
             List<Conjunto> Conjuntos = new List<Conjunto>(); //Guardaremos los conjuntos (por nivel) de multicoberturas
+            ProgressBar PB = new ProgressBar();
 
+            int Pro = 0; 
+            int MaxPro = Combinaciones.Count;
             foreach (string combinacion in Combinaciones)
             {
                 List<string> PermutaList = combinacion.Split(" () ").ToList();
@@ -203,8 +196,10 @@ namespace Berta
                         Conjuntos.Add(A_Guardar_Conjunto);
                     }
                 }
+                PB.Report((double)Pro/ MaxPro);
+                Pro++;
             }
-
+            PB.Dispose();
             return Conjuntos;
         }
 
@@ -246,6 +241,7 @@ namespace Berta
             //Dos casos, hay multiple máx o no. Si la hay se ejecuta como en version Alpha
             List<Cobertura> TotalPorLVL = new List<Cobertura>(); //Lista para guardar la unión por lvl de multicobertura (anillos)
             var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //Factoria para crear todos los multipoligonos o poligonos del codigo
+            ProgressBar PB = new ProgressBar();
 
             if (CoberturaMAX) //Hay cobertura max
             {
@@ -301,6 +297,7 @@ namespace Berta
                     GEO_Resta = Operaciones.ReducirPrecision(GEO_Resta.Union(UnionLvl));
                     TotalPorLVL.RemoveAll(x => x.Area_Operaciones.IsEmpty == true);//Eliminamos coberturas vacias
 
+                    PB.Report((double)j / CoberturasPorLvl.Count);
                     j++;
                 }
             }
@@ -355,10 +352,11 @@ namespace Berta
 
                     CoberturasPorLvl[j].A_Operar.RemoveAll(x => x.Area_Operaciones.IsEmpty == true);//Eliminamos coberturas vacias
 
+                    PB.Report((double)j / CoberturasPorLvl.Count);
                     j++;
                 }
             }
-
+            PB.Dispose();
 
             if (TotalPorLVL.Count != 0)
             {
@@ -366,7 +364,12 @@ namespace Berta
                 return (Anillos, CoberturasPorLvl);
             }
             else
+            {
+                //TotalPorLVL.Add(new Cobertura("NaN", "FL999", "Original", gff.CreateEmpty(Dimension.Curve))); //Fake 
+                //Conjunto Anillos = new Conjunto(TotalPorLVL, "Total por lvl", this.FL); //Generamos un conjunto con todos los anillos
                 return (null, CoberturasPorLvl); //El elemento totalPorLvl solo sera nulo en calculos de coberturas simples
+            }
+                
         }
 
         /// <summary>
@@ -385,7 +388,7 @@ namespace Berta
 
             if (existeMax)
             {
-                ConjuntosPorLvl.RemoveAt(0); //Eliminamos cobertura máxima ya que esta presenter en otro parámetro
+                ConjuntosPorLvl.RemoveAt(0); //Eliminamos cobertura máxima ya que esta presente en otro parámetro
                 return (ConjuntosPorLvl_F, Anillos, CoberturaMaxima);
             }
             else
@@ -444,12 +447,17 @@ namespace Berta
 
             //Crear simple total y filtrar por umbral
             Cobertura SimplesTotal = new Cobertura("", this.FL, "simple total", FormarCoberturaTotal().Area_Operaciones.Difference(InterseccionTotal.Area_Operaciones));
-            foreach (Polygon TrozoAnillo in (MultiPolygon)SimplesTotal.Area_Operaciones)
+            //Depende de si es poligono o multipoligono, si es poligono seguro será mayor que el umbral,
+            //ya que no es un caso habitual que un anillo de cobertura sea un solo poligono
+            if(SimplesTotal.Area_Operaciones.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
             {
-                if (TrozoAnillo.Area >= Umbral)
-                    Verificados.Add(TrozoAnillo);
+                foreach (Polygon TrozoAnillo in (MultiPolygon)SimplesTotal.Area_Operaciones)
+                {
+                    if (TrozoAnillo.Area >= Umbral)
+                        Verificados.Add(TrozoAnillo);
+                }
+                SimplesTotal.ActualizarAreas(gff.CreateMultiPolygon(Verificados.ToArray()));
             }
-            SimplesTotal.ActualizarAreas(gff.CreateMultiPolygon(Verificados.ToArray()));
 
 
             //Restar para cada original la intersección total y asi obtener las coberutras simples 
@@ -511,5 +519,104 @@ namespace Berta
 
             return R;
         }
+    }
+
+    /// <summary>
+    /// Clase para integrar un ProgresBar al menú
+    /// </summary>
+    public class ProgressBar : IDisposable, IProgress<double>
+    {
+        private const int blockCount = 10;
+        private readonly TimeSpan animationInterval = TimeSpan.FromSeconds(1.0 / 8);
+        private const string animation = @"|/-\";
+
+        private readonly Timer timer;
+
+        private double currentProgress = 0;
+        private string currentText = string.Empty;
+        private bool disposed = false;
+        private int animationIndex = 0;
+
+        public ProgressBar()
+        {
+            timer = new Timer(TimerHandler);
+
+            // A progress bar is only for temporary display in a console window.
+            // If the console output is redirected to a file, draw nothing.
+            // Otherwise, we'll end up with a lot of garbage in the target file.
+            if (!Console.IsOutputRedirected)
+            {
+                ResetTimer();
+            }
+        }
+
+        public void Report(double value)
+        {
+            // Make sure value is in [0..1] range
+            value = Math.Max(0, Math.Min(1, value));
+            Interlocked.Exchange(ref currentProgress, value);
+        }
+
+        private void TimerHandler(object state)
+        {
+            lock (timer)
+            {
+                if (disposed) return;
+
+                int progressBlockCount = (int)(currentProgress * blockCount);
+                int percent = (int)(currentProgress * 100);
+                string text = string.Format("[{0}{1}] {2,3}% {3}",
+                    new string('#', progressBlockCount), new string('-', blockCount - progressBlockCount),
+                    percent,
+                    animation[animationIndex++ % animation.Length]);
+                UpdateText(text);
+
+                ResetTimer();
+            }
+        }
+
+        private void UpdateText(string text)
+        {
+            // Get length of common portion
+            int commonPrefixLength = 0;
+            int commonLength = Math.Min(currentText.Length, text.Length);
+            while (commonPrefixLength < commonLength && text[commonPrefixLength] == currentText[commonPrefixLength])
+            {
+                commonPrefixLength++;
+            }
+
+            // Backtrack to the first differing character
+            StringBuilder outputBuilder = new StringBuilder();
+            outputBuilder.Append('\b', currentText.Length - commonPrefixLength);
+
+            // Output new suffix
+            outputBuilder.Append(text.Substring(commonPrefixLength));
+
+            // If the new text is shorter than the old one: delete overlapping characters
+            int overlapCount = currentText.Length - text.Length;
+            if (overlapCount > 0)
+            {
+                outputBuilder.Append(' ', overlapCount);
+                outputBuilder.Append('\b', overlapCount);
+            }
+
+            Console.Write(outputBuilder);
+            currentText = text;
+        }
+
+        private void ResetTimer()
+        {
+            timer.Change(animationInterval, TimeSpan.FromMilliseconds(-1));
+        }
+
+        public void Dispose()
+        {
+            lock (timer)
+            {
+                disposed = true;
+                UpdateText(string.Empty);
+            }
+        }
+
     }
 }

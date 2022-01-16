@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
-    <AssemblyName>Berta T</AssemblyName>
+    <AssemblyName>Berta Tools</AssemblyName>
     <RootNamespace>Berta</RootNamespace>
     <ApplicationIcon>BT.ico</ApplicationIcon>
   </PropertyGroup>

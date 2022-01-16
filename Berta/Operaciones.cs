@@ -289,9 +289,7 @@ namespace Berta
 
                 List<Geometry> Poligonos = TraducirPoligono(H, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
 
-                
                 Originales.Add(new Cobertura(Nombre_sin_fl, FL_IN, "original", Poligonos));
-
                 Console.WriteLine(Nombre);
                 NombresCargados.Add(Nombre);
             }
@@ -553,7 +551,7 @@ namespace Berta
             bool Correcto = false;
             while (!Correcto)
             {
-                Console.WriteLine("Directorio de entrada");
+                Console.WriteLine("Directorio de entrada, (no puede contener puntos (.))");
                 Directorio_IN = Console.ReadLine();
                 DI = new DirectoryInfo(Directorio_IN);
                 try
@@ -565,7 +563,7 @@ namespace Berta
                 catch
                 {
                     Console.WriteLine();
-                    Console.WriteLine("Error con el directorio de entrada");
+                    Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
                     Console.ReadLine();
                     Console.Clear();
                     Console.WriteLine("Berta T");
@@ -626,7 +624,7 @@ namespace Berta
             bool Correcto = false;
             while (!Correcto)
             {
-                Console.WriteLine("Directorio de salida");
+                Console.WriteLine("Directorio de salida, (no puede contener puntos (.))");
                 Directorio_OUT = Console.ReadLine();
                 DO = new DirectoryInfo(Directorio_OUT);
                 try
@@ -637,7 +635,7 @@ namespace Berta
                 catch
                 {
                     Console.WriteLine();
-                    Console.WriteLine("Error con el directorio de salida");
+                    Console.WriteLine("Error con el directorio de salida, no puede contener puntos (.)");
                     Console.ReadLine();
                     Console.Clear();
                     Console.WriteLine("Berta T");
@@ -663,5 +661,90 @@ namespace Berta
             return Directorio_OUT;
         }
 
+
+        /// <summary>
+        /// Parte del menú del filtrado SACTA que pregunta por el directorio de entrada
+        /// </summary>
+        /// <param name="FL"></param>
+        /// <returns></returns>
+        public static (DirectoryInfo, string) Menu_DirectorioIN_SACTA() //Preguntar directiorio de entrada
+        {
+            Console.WriteLine();
+            string Directorio_IN = null;
+            DirectoryInfo DI = new DirectoryInfo(@".\Temporal");
+            bool Correcto = false;
+            while (!Correcto)
+            {
+                Console.WriteLine("Directorio de entrada (no puede contener puntos (.))");
+                Directorio_IN = Console.ReadLine();
+                DI = new DirectoryInfo(Directorio_IN);
+                try
+                {
+                    int control = DI.GetFiles().Count();
+                    if (control != 0)
+                        Correcto = true;
+                }
+                catch
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                    Console.ReadLine();
+                    Console.Clear();
+                    Console.WriteLine("Berta T");
+                    Console.WriteLine();
+                    Console.WriteLine("2 - Filtrado SACTA");
+                    Console.WriteLine();
+                }
+            }
+
+            return (DI, Directorio_IN);
+        }
+
+        /// <summary>
+        /// Parte del menú del filtrado SACTA que pregunta por el directorio de entrada del filtro
+        /// </summary>
+        /// <param name="NombresCargados"></param>
+        /// <param name="path_Cob"></param>
+        /// <returns></returns>
+        public static (Cobertura, string) Menu_DirectorioSACTA_SACTA(List<string> NombresCargados, string path_Cob)
+        {
+            Cobertura Filtro_SACTA = new Cobertura();
+            string path_SACTA = "";
+            bool Correcto = false;
+            while (!Correcto)
+            {
+                Console.Clear();
+                Console.WriteLine("Berta T");
+                Console.WriteLine();
+                Console.WriteLine("2 - Filtrado SACTA");
+                Console.WriteLine();
+                Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
+                Console.WriteLine();
+                Console.WriteLine("Archivos cargados:");
+                foreach (string Nom in NombresCargados)
+                {
+                    Console.WriteLine(Nom);
+                }
+                Console.WriteLine();
+                Console.WriteLine("Directorio completo del kmz con el filtro SACTA:");
+                path_SACTA = Console.ReadLine();
+
+                try
+                {
+                    (FileStream H, string Nombre) = Operaciones.AbrirKMLdeKMZ(path_SACTA);
+                    List<Geometry> Poligonos = Operaciones.TraducirPoligono(H, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
+                    Filtro_SACTA = new Cobertura("Filtro", "FL999", "original", Poligonos); //Cobertura donde guardaremos el filtro SACTA seleccionado
+                    Correcto = true;
+                }
+                catch
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Error con el directorio completo del kmz con el filtro SACTA, no puede contener puntos a excepción del archivo(.)");
+                    Console.ReadLine();
+                }
+            }
+
+            return (Filtro_SACTA,path_SACTA);
+        }
     }
 }
