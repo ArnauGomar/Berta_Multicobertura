@@ -281,7 +281,7 @@ namespace Berta
                         if (FL_IN == null)
                             FL_IN = V.Last();
                         List<string> L = V.ToList();
-                        L.Remove(FL_IN);
+                        L.Remove(V.Last());
                         Nombre_sin_fl = string.Join('_',L);
                     }
                      
@@ -553,12 +553,26 @@ namespace Berta
             {
                 Console.WriteLine("Directorio de entrada, (no puede contener puntos (.))");
                 Directorio_IN = Console.ReadLine();
-                DI = new DirectoryInfo(Directorio_IN);
+                
                 try
                 {
+                    DI = new DirectoryInfo(Directorio_IN);
                     int control = DI.GetFiles().Count();
                     if (control != 0)
                         Correcto = true;
+                    else
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                        Console.ReadLine();
+                        Console.Clear();
+                        Console.WriteLine("Berta T");
+                        Console.WriteLine();
+                        Console.WriteLine("1 - Cálculo de multi-coberturas");
+                        Console.WriteLine();
+                        Console.WriteLine("FL seleccionado: " + FL);
+                        Console.WriteLine();
+                    }
                 }
                 catch
                 {
@@ -626,9 +640,9 @@ namespace Berta
             {
                 Console.WriteLine("Directorio de salida, (no puede contener puntos (.))");
                 Directorio_OUT = Console.ReadLine();
-                DO = new DirectoryInfo(Directorio_OUT);
                 try
                 {
+                    DO = new DirectoryInfo(Directorio_OUT);
                     DO.GetFiles().Count();
                     Correcto = true;
                 }
@@ -677,12 +691,23 @@ namespace Berta
             {
                 Console.WriteLine("Directorio de entrada (no puede contener puntos (.))");
                 Directorio_IN = Console.ReadLine();
-                DI = new DirectoryInfo(Directorio_IN);
                 try
                 {
+                    DI = new DirectoryInfo(Directorio_IN);
                     int control = DI.GetFiles().Count();
                     if (control != 0)
                         Correcto = true;
+                    else
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("Error con el directorio de entrada, no contiene archivos");
+                        Console.ReadLine();
+                        Console.Clear();
+                        Console.WriteLine("Berta T");
+                        Console.WriteLine();
+                        Console.WriteLine("2 - Filtrado SACTA");
+                        Console.WriteLine();
+                    }
                 }
                 catch
                 {
@@ -745,6 +770,73 @@ namespace Berta
             }
 
             return (Filtro_SACTA,path_SACTA);
+        }
+
+        public static void Menu_DirectorioOUT_SACTA(string path_Cob, string path_SACTA, Conjunto Coberturas_Filtradas)
+        {
+            //Confirmar directorio
+            Console.WriteLine();
+            string Directorio_OUT = null;
+            DirectoryInfo DO = new DirectoryInfo(@".\Temporal");
+            bool Correcto = false;
+            while (!Correcto)
+            {
+                Console.WriteLine("Directorio de salida, (no puede contener puntos (.))");
+                Directorio_OUT = Console.ReadLine();
+                try
+                {
+                    DO = new DirectoryInfo(Directorio_OUT);
+                    DO.GetFiles().Count();
+                    Correcto = true;
+                }
+                catch
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Error con el directorio de salida, no puede contener puntos (.)");
+                    Console.ReadLine();
+                    Console.Clear();
+                    Console.WriteLine("Berta T");
+                    Console.Clear();
+                    Console.WriteLine("Berta T");
+                    Console.WriteLine();
+                    Console.WriteLine("2 - Filtrado SACTA");
+                    Console.WriteLine();
+                    Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
+                    Console.WriteLine();
+                    Console.WriteLine("Directorio completo del kmz de filtros SACTA: " + path_SACTA);
+                    Console.WriteLine();
+                }
+            }
+
+            //Guardar coberturas
+            int Pro = 0; int ProMax = Coberturas_Filtradas.A_Operar.Count;
+            ProgressBar PB = new ProgressBar();
+            foreach (Cobertura Cob in Coberturas_Filtradas.A_Operar)
+            {
+                var doc = Cob.CrearDocumentoSharpKML();
+                string[] NombreSplit = doc.Name.Split(" ");
+                string Name = "";
+                
+                if (NombreSplit.Length > 2) //Si hay mas de dos elementos, juntar primero el nombre y despues el FL
+                {
+                    int i = 0; string[] NomesNom = new string[NombreSplit.Length - 1];
+                    while (i < NombreSplit.Length - 1)
+                    {
+                        NomesNom[i] = NombreSplit[i];
+                    }
+
+                    Name = string.Join(' ', NomesNom);
+                }
+                else
+                    Name = NombreSplit.First();
+
+                doc.Name = Name + "-" + NombreSplit.Last();
+
+                Operaciones.CrearKML_KMZ(doc, doc.Name, "Temporal", Directorio_OUT); //Se crea un kml temporal para después crear KMZ
+                PB.Report((double)Pro / ProMax);
+                Pro++;
+            }
+            PB.Dispose();
         }
     }
 }

@@ -408,16 +408,12 @@ namespace Berta
                     }//Cáclulo de multicobertura
                     else if (Control_M == 2) //Filtrado SACTA
                     {
-                        try
+                        //try
                         {
                             Console.Clear();
                             Console.WriteLine("Berta T");
                             Console.WriteLine();
                             Console.WriteLine("2 - Filtrado SACTA");
-                            //Console.WriteLine();
-                            //Console.WriteLine("Directorio de cobertura a filtrar:");
-                            //string path_Cob = Console.ReadLine();
-                            //DirectoryInfo Directorio_Cobertura = new DirectoryInfo(path_Cob);
 
                             (DirectoryInfo Directorio_Cobertura, string path_Cob) = Operaciones.Menu_DirectorioIN_SACTA();
 
@@ -434,7 +430,25 @@ namespace Berta
                             int i = 0;
                             foreach(Cobertura cob in Coberturas)
                             {
-                                cob.FL = NombresCargados[i].Split('-')[1];
+                                try
+                                {
+                                    cob.FL = NombresCargados[i].Split('-')[1];
+                                }
+                                catch 
+                                {
+                                    try
+                                    {
+                                        cob.FL = NombresCargados[i].Split('_').Last();
+                                    }
+                                    catch 
+                                    {
+                                        Console.WriteLine("Error en formato de entrada de los archivos, el separador del FL debería ser '-' o '_' (NOMBRE-FLXXX o NOMBRE_FLXXX)");
+                                        Console.WriteLine("Error en: "+NombresCargados[i]);
+                                        Console.WriteLine();
+                                        Console.WriteLine("Enter para continuar");
+                                        Console.ReadLine();
+                                    }
+                                }   
                                 i++;
                             }
 
@@ -443,7 +457,7 @@ namespace Berta
                                 bool Control_DC = false; //Bucle para cargar
                                 while (Control_DC==false)
                                 {
-                                    try
+                                    //try
                                     {
                                         Console.Clear();
                                         Console.WriteLine("Berta T");
@@ -500,18 +514,18 @@ namespace Berta
                                             //Seguimos el bucle
                                         }
                                     }
-                                    catch (Exception e)
-                                    {
-                                        Console.WriteLine(e.Message);
-                                        Console.WriteLine();
-                                        Console.WriteLine("Enter para continuar");
-                                        Console.ReadLine();
-                                    }
+                                    //catch (Exception e)
+                                    //{
+                                    //    Console.WriteLine(e.Message);
+                                    //    Console.WriteLine();
+                                    //    Console.WriteLine("Enter para continuar");
+                                    //    Console.ReadLine();
+                                    //}
                                 }
                             }
 
                             Conjunto conjuntoAfiltrar = new Conjunto(Coberturas, "original", "FL999");
-                            try
+                            //try
                             {
                                 //Obtenemos el filtro SACTA
                                 //Console.Clear();
@@ -550,51 +564,54 @@ namespace Berta
                                 Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
                                 Console.WriteLine();
                                 Console.WriteLine("Directorio completo del kmz de filtros SACTA: " + path_SACTA);
-                                Console.WriteLine();
-                                Console.WriteLine("Directorio para exportar:");
-                                string path_Exp = Console.ReadLine();
 
-                                //Exportar
-                                int Control_CM_Parte2 = -1;
-                                while (Control_CM_Parte2!=0)
-                                {
-                                    foreach (Cobertura Cob in Filtrado.A_Operar)
-                                    {
-                                        var doc = Cob.CrearDocumentoSharpKML();
+                                Operaciones.Menu_DirectorioOUT_SACTA(path_Cob, path_SACTA, Filtrado);
 
-                                        int Control = Operaciones.CrearKML_KMZ(doc, doc.Name, "Temporal", path_Exp); //Se crea un kml temporal para después crear KMZ
-                                        if (Control == 0)
-                                        {
-                                            Control_CM_Parte2 = 0; //Finalizar bucle
-                                        }
-                                        else
-                                        {
-                                            Console.WriteLine("Directorio de destino no válido, no puede contener puntos (.)");
-                                            Console.WriteLine();
-                                            Console.WriteLine("Enter para continuar");
-                                            Console.ReadLine();
-                                        }
-                                    }
-                                }
+                                //Console.WriteLine();
+                                //Console.WriteLine("Directorio para exportar:");
+                                //string path_Exp = Console.ReadLine();
+
+                                ////Exportar //REWORK
+                                //int Control_CM_Parte2 = -1;
+                                //while (Control_CM_Parte2!=0) 
+                                //{
+                                //    foreach (Cobertura Cob in Filtrado.A_Operar)
+                                //    {
+                                //        var doc = Cob.CrearDocumentoSharpKML();
+
+                                //        int Control = Operaciones.CrearKML_KMZ(doc, doc.Name, "Temporal", path_Exp); //Se crea un kml temporal para después crear KMZ
+                                //        if (Control == 0)
+                                //        {
+                                //            Control_CM_Parte2 = 0; //Finalizar bucle
+                                //        }
+                                //        else
+                                //        {
+                                //            Console.WriteLine("Directorio de destino no válido, no puede contener puntos (.)");
+                                //            Console.WriteLine();
+                                //            Console.WriteLine("Enter para continuar");
+                                //            Console.ReadLine();
+                                //        }
+                                //    }
+                                //}
                                 Console.WriteLine("Exportado con exito!");
                                 Console.ReadLine();
                             }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine(e.Message);
-                                Console.WriteLine();
-                                Console.WriteLine("Enter para continuar");
-                                Console.ReadLine();
-                            }
+                            //catch (Exception e)
+                            //{
+                            //    Console.WriteLine(e.Message);
+                            //    Console.WriteLine();
+                            //    Console.WriteLine("Enter para continuar");
+                            //    Console.ReadLine();
+                            //}
 
                         } //Try general
-                        catch (Exception e)
-                        {
-                            Console.WriteLine(e.Message);
-                            Console.WriteLine();
-                            Console.WriteLine("Enter para continuar");
-                            Console.ReadLine();
-                        }
+                        //catch (Exception e)
+                        //{
+                        //    Console.WriteLine(e.Message);
+                        //    Console.WriteLine();
+                        //    Console.WriteLine("Enter para continuar");
+                        //    Console.ReadLine();
+                        //}
                     } //Filtrado SACTA
                     else if (Control_M == 5)//Ajustes
                     {
@@ -705,7 +722,7 @@ namespace Berta
                         }
                     }//Opciones del programa
                 }
-                    catch (FormatException e) //Detectar errores sobre el Control_M
+                catch (FormatException e) //Detectar errores sobre el Control_M
                 {
                     Console.WriteLine(e.Message);
                     Console.WriteLine();

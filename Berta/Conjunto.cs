@@ -508,13 +508,19 @@ namespace Berta
         {
             List<Cobertura> Filtradas = new List<Cobertura>();
 
-            foreach(Cobertura Cob in this.A_Operar)
+            ProgressBar PB = new ProgressBar();
+            int Pro = 0;
+            int MaxPro = this.A_Operar.Count;
+            foreach (Cobertura Cob in this.A_Operar)
             {
                 Geometry Filtrada = Cob.Area_Operaciones.Difference(SACTA.Area_Operaciones);
 
                 Filtradas.Add(new Cobertura(Cob.nombre, Cob.FL, "original", Filtrada));
-            }
 
+                PB.Report((double)Pro / MaxPro);
+                Pro++;
+            }
+            PB.Dispose();
             Conjunto R = new Conjunto(Filtradas, "Filtradas", "FL999");
 
             return R;
