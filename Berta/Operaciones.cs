@@ -264,8 +264,8 @@ namespace Berta
                 //Abrir KML
                 (FileStream H, string Nombre) =  AbrirKMLdeKMZ(file.FullName);
 
-                //Problemática -FLXXX o _FLXXX + problemática FL en filtrado SACTA
-                string Nombre_sin_fl="ERROR";
+                //Problemática - FLXXX o _FLXXX +problemática FL en filtrado SACTA
+                string Nombre_sin_fl = "ERROR";
                 string[] V = Nombre.Split('-');
                 if (V.Length > 1) //Nombre en formato XX_XXXXXXX-FLXXX
                 {
@@ -273,7 +273,7 @@ namespace Berta
                         FL_IN = V[1];
                     Nombre_sin_fl = V[0];
                 }
-                else 
+                else
                 {
                     V = Nombre.Split('_'); //Nombre en formato XX_XXXXXXX_FLXXX
                     if (Nombre.Split('_').Length > 1)
@@ -282,12 +282,11 @@ namespace Berta
                             FL_IN = V.Last();
                         List<string> L = V.ToList();
                         L.Remove(V.Last());
-                        Nombre_sin_fl = string.Join('_',L);
+                        Nombre_sin_fl = string.Join('_', L);
                     }
-                     
                 }
 
-                List<Geometry> Poligonos = TraducirPoligono(H, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
+                List<Geometry> Poligonos = TraducirPoligono(H, Nombre_sin_fl); //Carga kml, extrae en SharpKML y traduce a NTS
 
                 Originales.Add(new Cobertura(Nombre_sin_fl, FL_IN, "original", Poligonos));
                 Console.WriteLine(Nombre);
@@ -523,7 +522,49 @@ namespace Berta
                 {
                     chars.Add(c);
                 }
+                
+                try
+                {
+                    long N = 0; //Comprobar que el FL es correcto, solo si lo es el programa seguira
+                    if ((chars[0] == 'F') && (chars[1] == 'L') && (long.TryParse(chars[2].ToString(), out N)) && (long.TryParse(chars[3].ToString(), out N)) && (long.TryParse(chars[4].ToString(), out N)))
+                        FL_correcto = true;
+                    else
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("El FL indicado no es correcto");
+                        Console.ReadLine();
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("El FL indicado no es correcto");
+                    Console.WriteLine("DEBUG: "+e.Message);
+                    Console.ReadLine();
+                }
+                
+            }
 
+            return FL_IN;
+        }
+
+        /// <summary>
+        /// Parte del menú de comando que interroga el FL, retorna null si experimenta algun error.
+        /// </summary>
+        /// <param name="FL_IN"></param>
+        /// <returns></returns>
+        public static string Comando_FL(string [] args)
+        {
+            string FL_IN = args[1];
+            List<char> chars = new List<char>();
+            bool FL_correcto = false;
+            foreach (char c in FL_IN)
+            {
+                chars.Add(c);
+            }
+
+            try
+            {
                 long N = 0; //Comprobar que el FL es correcto, solo si lo es el programa seguira
                 if ((chars[0] == 'F') && (chars[1] == 'L') && (long.TryParse(chars[2].ToString(), out N)) && (long.TryParse(chars[3].ToString(), out N)) && (long.TryParse(chars[4].ToString(), out N)))
                     FL_correcto = true;
@@ -531,11 +572,26 @@ namespace Berta
                 {
                     Console.WriteLine();
                     Console.WriteLine("El FL indicado no es correcto");
-                    Console.ReadLine();
+                    System.Threading.Thread.Sleep(2000);
+                    Operaciones.EscribirOutput(args, "FL indicado no válido");
+                    Console.Clear();
                 }
+                if (FL_correcto)
+                    return FL_IN;
+                else
+                    return null;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine();
+                Console.WriteLine("El FL indicado no es correcto");
+                Console.WriteLine("DEBUG: " + e.Message);
+                Operaciones.EscribirOutput(args, "FL indicado no válido ("+e.Message+")");
+                System.Threading.Thread.Sleep(2000);
+                Console.Clear();
             }
 
-            return FL_IN;
+            return null;
         }
 
         /// <summary>
@@ -564,6 +620,7 @@ namespace Berta
                     {
                         Console.WriteLine();
                         Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                        Console.WriteLine("DEBUG: Carpeta vacía");
                         Console.ReadLine();
                         Console.Clear();
                         Console.WriteLine("Berta T");
@@ -574,10 +631,11 @@ namespace Berta
                         Console.WriteLine();
                     }
                 }
-                catch
+                catch (Exception e)
                 {
                     Console.WriteLine();
                     Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                    Console.WriteLine("DEBUG: "+ e.Message);
                     Console.ReadLine();
                     Console.Clear();
                     Console.WriteLine("Berta T");
@@ -590,6 +648,50 @@ namespace Berta
             }
 
             return (DI, Directorio_IN);
+        }
+
+        /// <summary>
+        /// Parte del menú de comando que interroga el directorio de entrada, retorna null si experimenta algun error.
+        /// </summary>
+        /// <param name="Directorio_IN"></param>
+        /// <returns></returns>
+        public static (DirectoryInfo, string) Comando_DirectorioIN(string[] args)
+        {
+            string Directorio_IN = "";
+            if (Convert.ToInt32(args[0]) == 1)
+                Directorio_IN = args[2];
+            else
+                Directorio_IN = args[1];
+            DirectoryInfo DI = new DirectoryInfo(@".\Temporal");
+            try
+            {
+                DI = new DirectoryInfo(Directorio_IN);
+                int control = DI.GetFiles().Count();
+                if (control != 0)
+                    return (DI, Directorio_IN);
+                else
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                    Console.WriteLine("DEBUG: Carpeta vacía");
+                    Operaciones.EscribirOutput(args, "Directorio de entrada no válido (Carpeta vacía)");
+                    System.Threading.Thread.Sleep(2000);
+                    Console.Clear();
+
+                    return (null, null);
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                Console.WriteLine("DEBUG: " + e.Message);
+                Operaciones.EscribirOutput(args, "Directorio de entrada no válido (" + e.Message + ")");
+                System.Threading.Thread.Sleep(2000);
+                Console.Clear();
+
+                return (null, null);
+            }
         }
 
         /// <summary>
@@ -609,14 +711,40 @@ namespace Berta
                 {
                     Umbral_Areas = Convert.ToDouble(NM_Umbral) * Trans;
                 }
-                catch
+                catch (Exception e)
                 {
                     Console.WriteLine("Formato incorrecto, se usará el umbral predeterminado (1 NM^2)");
+                    Console.WriteLine("DEBUG: " + e.Message);
                     Console.ReadLine();
                 }
             }
 
             return Umbral_Areas;
+        }
+
+
+        /// <summary>
+        /// Parte del menú de comando que interroga el umbral de discriminacion, retorna -1 si experimenta algun error.
+        /// </summary>
+        /// <param name="Trans"></param>
+        /// <param name="NM_Umbral"></param>
+        /// <returns></returns>
+        public static double Comando_Umbral(double Trans, string[] args)
+        {
+            try
+            {
+                double NM_Umbral = Convert.ToDouble(args[3].Replace('.', ','));
+                double Umbral_Areas = NM_Umbral * Trans;
+                return Umbral_Areas;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("DEBUG: " + e.Message);
+                Operaciones.EscribirOutput(args, "Error con umbral de discriminación (" + e.Message + ")");
+                System.Threading.Thread.Sleep(2000);
+                Console.Clear();
+                return -1;
+            }
         }
 
         /// <summary>
@@ -646,10 +774,11 @@ namespace Berta
                     DO.GetFiles().Count();
                     Correcto = true;
                 }
-                catch
+                catch (Exception e)
                 {
                     Console.WriteLine();
                     Console.WriteLine("Error con el directorio de salida, no puede contener puntos (.)");
+                    Console.WriteLine("DEBUG: " + e.Message);
                     Console.ReadLine();
                     Console.Clear();
                     Console.WriteLine("Berta T");
@@ -675,6 +804,30 @@ namespace Berta
             return Directorio_OUT;
         }
 
+        /// <summary>
+        ///  Parte del menú de comando que interroga el directorio de salida, retorna null si experimenta algun error.
+        /// </summary>
+        /// <param name="Directorio_OUT"></param>
+        /// <returns></returns>
+        public static string Comando_DirectorioOUT(string Directorio_OUT)
+        {
+            DirectoryInfo DO = new DirectoryInfo(@".\Temporal");
+            try
+            {
+                DO = new DirectoryInfo(Directorio_OUT);
+                DO.GetFiles().Count();
+                return Directorio_OUT;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Error con el directorio de salida, no puede contener puntos (.)");
+                Console.WriteLine("DEBUG: " + e.Message);
+                System.Threading.Thread.Sleep(2000);
+                Console.Clear();
+                return null;
+            }
+        }
 
         /// <summary>
         /// Parte del menú del filtrado SACTA que pregunta por el directorio de entrada
@@ -701,18 +854,17 @@ namespace Berta
                     {
                         Console.WriteLine();
                         Console.WriteLine("Error con el directorio de entrada, no contiene archivos");
+                        Console.WriteLine("DEBUG: Carpeta vacía");
+                        Console.WriteLine("Enter para continuar");
                         Console.ReadLine();
-                        Console.Clear();
-                        Console.WriteLine("Berta T");
-                        Console.WriteLine();
-                        Console.WriteLine("2 - Filtrado SACTA");
-                        Console.WriteLine();
                     }
                 }
-                catch
+                catch (Exception e)
                 {
                     Console.WriteLine();
                     Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                    Console.WriteLine("DEBUG: " + e.Message);
+                    Console.WriteLine("Enter para continuar");
                     Console.ReadLine();
                     Console.Clear();
                     Console.WriteLine("Berta T");
@@ -731,7 +883,7 @@ namespace Berta
         /// <param name="NombresCargados"></param>
         /// <param name="path_Cob"></param>
         /// <returns></returns>
-        public static (Cobertura, string) Menu_DirectorioSACTA_SACTA(List<string> NombresCargados, string path_Cob)
+        public static (Cobertura, string) Menu_DirectorioSACTA_SACTA(List<string> NombresCargados, string path_Cob, int CvsM, string[] args)
         {
             Cobertura Filtro_SACTA = new Cobertura();
             string path_SACTA = "";
@@ -752,7 +904,15 @@ namespace Berta
                 }
                 Console.WriteLine();
                 Console.WriteLine("Directorio completo del kmz con el filtro SACTA:");
-                path_SACTA = Console.ReadLine();
+                
+                if (CvsM == 0)
+                    path_SACTA = Console.ReadLine();
+                else
+                {
+                    path_SACTA = args[2];
+                    Correcto = true;
+                }
+                    
 
                 try
                 {
@@ -761,39 +921,70 @@ namespace Berta
                     Filtro_SACTA = new Cobertura("Filtro", "FL999", "original", Poligonos); //Cobertura donde guardaremos el filtro SACTA seleccionado
                     Correcto = true;
                 }
-                catch
+                catch (Exception e)
                 {
+                    Filtro_SACTA = null;
                     Console.WriteLine();
                     Console.WriteLine("Error con el directorio completo del kmz con el filtro SACTA, no puede contener puntos a excepción del archivo(.)");
-                    Console.ReadLine();
+                    Console.WriteLine("DEBUG: " + e.Message);
+                    if(CvsM==0)
+                    {
+                        Console.WriteLine("Enter para continuar");
+                        Console.ReadLine();
+                    }
+                    else
+                    {
+                        System.Threading.Thread.Sleep(2000);
+                        Operaciones.EscribirOutput(args, "Error directorio filtro SACTA (" + e + ")");
+                    }
+                    
                 }
             }
 
             return (Filtro_SACTA,path_SACTA);
         }
 
-        public static void Menu_DirectorioOUT_SACTA(string path_Cob, string path_SACTA, Conjunto Coberturas_Filtradas)
+        public static int Menu_DirectorioOUT_SACTA(string path_Cob, string path_SACTA, Conjunto Coberturas_Filtradas, int CvsM, string[] args)
         {
             //Confirmar directorio
             Console.WriteLine();
             string Directorio_OUT = null;
             DirectoryInfo DO = new DirectoryInfo(@".\Temporal");
             bool Correcto = false;
+            bool errorFatal = false;
             while (!Correcto)
             {
                 Console.WriteLine("Directorio de salida, (no puede contener puntos (.))");
-                Directorio_OUT = Console.ReadLine();
+                if(CvsM==0)
+                    Directorio_OUT = Console.ReadLine();
+                else
+                {
+                    Directorio_OUT = args[3];
+                    Correcto = true;
+                }
                 try
                 {
                     DO = new DirectoryInfo(Directorio_OUT);
                     DO.GetFiles().Count();
                     Correcto = true;
                 }
-                catch
+                catch (Exception e)
                 {
                     Console.WriteLine();
                     Console.WriteLine("Error con el directorio de salida, no puede contener puntos (.)");
-                    Console.ReadLine();
+                    Console.WriteLine("DEBUG: " + e.Message);
+                    if(CvsM==0)
+                    {
+                        Console.WriteLine("Enter para continuar");
+                        Console.ReadLine();
+                    }
+                    else
+                    {
+                        System.Threading.Thread.Sleep(2000);
+                        Operaciones.EscribirOutput(args, "Error directorio salida (" + e + ")");
+                        errorFatal = true;
+                    }
+                    
                     Console.Clear();
                     Console.WriteLine("Berta T");
                     Console.Clear();
@@ -808,35 +999,82 @@ namespace Berta
                 }
             }
 
-            //Guardar coberturas
-            int Pro = 0; int ProMax = Coberturas_Filtradas.A_Operar.Count;
-            ProgressBar PB = new ProgressBar();
-            foreach (Cobertura Cob in Coberturas_Filtradas.A_Operar)
+            if (!errorFatal)
             {
-                var doc = Cob.CrearDocumentoSharpKML();
-                string[] NombreSplit = doc.Name.Split(" ");
-                string Name = "";
-                
-                if (NombreSplit.Length > 2) //Si hay mas de dos elementos, juntar primero el nombre y despues el FL
+                //Guardar coberturas
+                int Pro = 0; int ProMax = Coberturas_Filtradas.A_Operar.Count;
+                ProgressBar PB = new ProgressBar();
+                foreach (Cobertura Cob in Coberturas_Filtradas.A_Operar)
                 {
-                    int i = 0; string[] NomesNom = new string[NombreSplit.Length - 1];
-                    while (i < NombreSplit.Length - 1)
+                    var doc = Cob.CrearDocumentoSharpKML();
+                    string[] NombreSplit = doc.Name.Split(" ");
+                    string Name = "";
+
+                    if (NombreSplit.Length > 2) //Si hay mas de dos elementos, juntar primero el nombre y despues el FL
                     {
-                        NomesNom[i] = NombreSplit[i];
+                        int i = 0; string[] NomesNom = new string[NombreSplit.Length - 1];
+                        while (i < NombreSplit.Length - 1)
+                        {
+                            NomesNom[i] = NombreSplit[i];
+                        }
+
+                        Name = string.Join(' ', NomesNom);
                     }
+                    else
+                        Name = NombreSplit.First();
 
-                    Name = string.Join(' ', NomesNom);
+                    doc.Name = Name + "-" + NombreSplit.Last();
+
+                    Operaciones.CrearKML_KMZ(doc, doc.Name, "Temporal", Directorio_OUT); //Se crea un kml temporal para después crear KMZ
+                    PB.Report((double)Pro / ProMax);
+                    Pro++;
                 }
-                else
-                    Name = NombreSplit.First();
-
-                doc.Name = Name + "-" + NombreSplit.Last();
-
-                Operaciones.CrearKML_KMZ(doc, doc.Name, "Temporal", Directorio_OUT); //Se crea un kml temporal para después crear KMZ
-                PB.Report((double)Pro / ProMax);
-                Pro++;
+                PB.Dispose();
+                return 0;
             }
-            PB.Dispose();
+            else
+                return -1;
+            
+        }
+
+        /// <summary>
+        /// Guardo información de estado de un comando
+        /// </summary>
+        /// <param name="Argumentos"></param>
+        /// <param name="Estado"></param>
+        public static void EscribirOutput(string [] Argumentos, string Estado)
+        {
+            try
+            {
+                StreamReader R = new StreamReader("Output_COMMAND.txt");
+                string Lin = R.ReadLine();
+                List<string> Doc = new List<string>();
+                while (Lin != null)
+                {
+                    Doc.Add(Lin);
+                    Lin = R.ReadLine();
+                }
+                R.Close();
+
+                string argumentos = string.Join(',', Argumentos);
+                string DataHora = DateTime.Now.ToString();
+                string[] NewLine = new string[3];
+                NewLine[0] = DataHora;
+                NewLine[1] = argumentos;
+                NewLine[2] = Estado;
+                string NewLineString = string.Join(' ', NewLine);
+                Doc.Add(NewLineString);
+
+                StreamWriter W = new StreamWriter("Output_COMMAND.txt");
+                foreach (string lin in Doc)
+                    W.WriteLine(lin);
+                W.Close();
+            }
+            catch
+            {
+                Console.WriteLine("Fichero Output_COMMAND.txt no encontrado");
+            }
+            
         }
     }
 }

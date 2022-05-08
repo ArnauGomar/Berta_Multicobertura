@@ -1,0 +1,35 @@
+Berta Tools 
+
+-Modo Menú
+
+	Insertar la llave de la operación deseada y seguir los pasos que indica el programa. Para cambiar a modo Comando, usar clave 5 "Ajustes" y seguidamente clave 1
+	"Seleccionar comando/menú". Una vez dentro de este apartado, introducir clave 1 "Comando".
+
+
+-Modo Comando
+
+	Introducir comando con toda la información de ejecución. El apartado "Ajustes" funciona igual que en el modo menú, por lo que insertar clave 5.
+
+	Cálculo de multi-cobertura
+	
+	Comando: 1, Nivel de vuelo, Directorio con archivos de entrada, Umbral de discriminación (NM), Nombre del proyecto, Directorio a exportar solución (Inicio). 
+	Ejemplo: 1,FL050,C:\Users\arnau\Desktop\Berta,1,TEST1-FL050,C:\Users\arnau\Desktop\Berta
+
+	Si el nivel de vuelo, directorio de entrada o umbral de discriminación no son entrados de forma correcta el programa volverá al estado inicial.
+	Si el directorio de salida contiene algun error o el programa no puede exportart correctamente la solución, se exportara de forma predeterminada a la 
+	carpeta Temporal, dentro de la carpeta Berta Tools (Vx.x)
+
+
+	Filtrado SACTA
+	
+	Comando: 2, Directorio con archivos de entrada, Directorio del filtro SACTA, Directorio a exportar solución
+	Ejemplo: 2,C:\Users\arnau\Desktop\Berta,C:\Users\arnau\Desktop\Berta\Filtros\Filtro SACTA BCNX.kmz,C:\Users\arnau\Desktop\Berta\Solución
+
+	Si el directorio de entrada no es válido, el programa retornará a la pantalla de inicio.
+	Si el directorio SACTA no es válido, el programa preguntará al usuario por uno válido. 
+	Si el directorio de salida no es válido, el programa preguntará al usuario por uno válido. 
+	Se ejecutará el filtrado a TODOS los archivos que contenga el directorio de entrada.
+
+	
+
+	1,FL025,G:\Berta - Otros\TEST_COM\COBERTURAS\FL025,0.8,CANARIAS-FL025,G:\Berta - Otros\TEST_COM\SALIDAS\FL025

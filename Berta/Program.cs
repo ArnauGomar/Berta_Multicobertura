@@ -17,11 +17,16 @@ namespace Berta
     
     class Program
     {
-        static void Main(string[] args)
+        static void Main(string[] args2)
         {
+            Boolean A = false;
+
+            string DirectoryplusArgs = Environment.CommandLine;
+            string onlyArgs = DirectoryplusArgs.Replace("\"" + Environment.GetCommandLineArgs()[0] + "\"", "");
+            string[] args = onlyArgs.Split(",");
+
             //Settings del NetTopologySuite para evitar errores de NaN en ciertos cálculos 
             //https://stackoverflow.com/questions/68035230/nettopology-found-non-noded-intersection-exception-when-determining-the-differ
-
             var curInstance = NetTopologySuite.NtsGeometryServices.Instance;
             NetTopologySuite.NtsGeometryServices.Instance = new NetTopologySuite.NtsGeometryServices(
                 curInstance.DefaultCoordinateSequenceFactory,
@@ -50,9 +55,11 @@ namespace Berta
 
             CvsM_R.Close();
 
+            //Queue<string> ColaComandos = new Queue<string>(); //Para guardar los distintos comandos dentro de una cola y ejecutarse uno tras de otro.
+
             int Control_M = -1;
-            List<string> comando = new List<string>();
-            while (Control_M != 0) //Menú principal
+            //List<string> comando = new List<string>();
+            while ((Control_M != 0)&&(!A)) //Menú principal
             {
                 try
                 {
@@ -68,31 +75,51 @@ namespace Berta
                     Console.WriteLine();
                     Console.WriteLine();
                     Console.WriteLine("Introduzca identificador de operación (p.e. 1)");
-                    if(args.Length ==0) //No pasamos nada des de consola superior
+
+                    //if(args.Length == 0) //No pasamos nada des de consola superior
+                    //{
+                    if (CvsM == 0) //Modo menú
+                        Control_M = Convert.ToInt32(Console.ReadLine()); //Actualizar valor Control_M
+                    else//Modo comando
                     {
-                        if (CvsM == 0) //Modo menú
-                            Control_M = Convert.ToInt32(Console.ReadLine()); //Actualizar valor Control_M
-                        else//Modo comando
+                        Console.Clear();
+                        Console.WriteLine("Berta T - COMMAND");
+                        Console.WriteLine();
+                        Console.WriteLine("1 - Cálculo de multi-coberturas (1,FL,DirectorioIn,Umbral(NM),NombreSalida,DirectorioOut)");
+                        Console.WriteLine("2 - Filtrado SACTA (2,DirectorioCoberturasIn,DirectorioFiltro,DirectorioCOberturasOut)");
+                        Console.WriteLine("3 - Cálculo de cobertura mínima ()");
+                        //Console.WriteLine("4 - Crear cola de comandos");
+                        Console.WriteLine("5 - Ajustes (mismo funcionamento que la visualización en menú)");
+                        Console.WriteLine();
+                        Console.WriteLine();
+                        Console.WriteLine("0 - Finalizar");
+                        Console.WriteLine();
+                        Console.WriteLine();
+                        Console.WriteLine("Introduzca cadena de comandos");
+
+                        if (args2.Count() == 0) //No pasamos comando desde consola superior
                         {
                             string lin = Console.ReadLine();
                             if (lin != "0") //No cerramos aplicación
                             {
-                                comando = lin.Split(',').ToList();
-                                Control_M = Convert.ToInt32(comando[0]);
+                                args = lin.Split(',');
+                                Console.WriteLine(args);
+                                Control_M = Convert.ToInt32(args[0]);
                             }
                             else
                                 Control_M = 0; //Cerramos aplicación
-
-                        }//Modo comando
-                    } //No pasamos nada des de consola superior
-                    else //Comando por consola superior/extrena
-                    {
-
+                        }
+                        else
+                        {
+                            A = true;
+                            Control_M = Convert.ToInt32(args[0]);
+                        }
+                            
                     }
-                    
 
+                    ////////////////// PROGRAMA ///////////////////////
                     //Ifs de control
-                    if (Control_M == 1) //Cáclulo de multicobertura
+                    if ((Control_M == 1)) //Cáclulo de multicobertura
                     {
                         List<SharpKml.Dom.Folder> Folders = new List<SharpKml.Dom.Folder>(); //Lista con archivos base kml para crear kmz final, donde se guardaran todas las carpetas con los resultados
                         SharpKml.Dom.Document KML_Cobertura_total = new SharpKml.Dom.Document(); //La cobertura total se guarda en un documento, no en una carpeta, por eso es una variable independiente
@@ -106,77 +133,73 @@ namespace Berta
                         TimeSpan TiempoEjecución_Parte2 = new TimeSpan(); //Variable para guardar el tiempo de ejecución. 
 
                         bool parte1 = false; //Control de parte1, si no se ha ejecutado correctamente la parte 1 la parte 2 no sucede.
-                        //try //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
-                        {
-                            //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
 
-                            DirectoryInfo DI = null;
-                            string FL_IN = "Error";
-                            if (CvsM == 0) //Modo menú
+                        //Parte1 - Cargar ficheros de entrada y ejecutar cálculos
+
+                        DirectoryInfo DI = null;
+                        string FL_IN = "Error";
+                        bool CommandControl = true; //Control para la versión comando.
+                        if (CvsM == 0) //Modo menú
+                        {
+                            //1.1 - FL
+                            FL_IN = Operaciones.Menu_FL();
+
+                            //1.2 - Entrada
+                            (DI, Directorio_IN) = Operaciones.Menu_DirectorioIN(FL_IN);
+
+                            //1.2.2 Entrada umbral de filtro (1NM de forma predeterminada)
+                            Umbral_Areas = Operaciones.Menu_Umbral(Trans);
+
+                        }//Modo menú
+                        else//Modo comando
+                        {
+                            if(args.Length==6)
                             {
                                 //1.1 - FL
-                                FL_IN = Operaciones.Menu_FL();
+                                FL_IN = Operaciones.Comando_FL(args);
 
                                 //1.2 - Entrada
-                                (DI, Directorio_IN) = Operaciones.Menu_DirectorioIN(FL_IN);
+                                (DI, Directorio_IN) = Operaciones.Comando_DirectorioIN(args);
 
                                 //1.2.2 Entrada umbral de filtro (1NM de forma predeterminada)
-                                Umbral_Areas = Operaciones.Menu_Umbral(Trans);
+                                Umbral_Areas = Operaciones.Comando_Umbral(Trans, args);
 
-                            }//Modo menú
-                            else//Modo comando
-                            {
-                                //1.1 - FL
-                                FL_IN = comando[1];
-                                bool FL_correcto = false;
-                                while (!FL_correcto)
-                                {
-                                    Console.Clear();
+                                if ((FL_IN == null) || (DI == null) || (Umbral_Areas == -1))
+                                    CommandControl = false;
                                     
-                                    List<char> chars = new List<char>();
-                                    foreach (char c in FL_IN)
-                                    {
-                                        chars.Add(c);
-                                    }
+                            }
+                            else //Comando mal
+                            {
+                                Console.WriteLine();
+                                Console.WriteLine("El comando no cumple las caracterisitcas necesarias para ejecutar esta orden");
+                                Operaciones.EscribirOutput(args, "Comando no válido, insuficientes argumentos");
+                                System.Threading.Thread.Sleep(2000);
+                            }
 
-                                    long N = 0; //Comprobar que el FL es correcto, solo si lo es el programa seguira
-                                    if ((chars[0] == 'F') && (chars[1] == 'L') && (long.TryParse(chars[2].ToString(), out N)) && (long.TryParse(chars[3].ToString(), out N)) && (long.TryParse(chars[4].ToString(), out N)))
-                                        FL_correcto = true;
-                                    else
-                                    {
-                                        Console.Clear();
-                                        Console.WriteLine("Berta T");
-                                        Console.WriteLine();
-                                        Console.WriteLine("1 - Cálculo de multi-coberturas");
-                                        Console.WriteLine();
-                                        Console.WriteLine("El FL indicado no es correcto, introduzca uno correcto");
-                                        Console.WriteLine();
-                                        Console.WriteLine("FL seleccionado (p.e.: FL100 / FL090):");
-                                        FL_IN = Console.ReadLine();
-                                    }
-                                }
-                            }//Modo comando
+                        }//Modo comando
 
-                            //1.3 - Cargar archivos
+                        //1.3 - Cargar archivos
                             
-                            Console.WriteLine("Archivos cargados:");
-                            if(DI.GetFiles().Count()>1) //Si hay mas de 1 archivo dentro de la carpeta se ejecuta el programa
+                        Console.WriteLine("Archivos cargados:");
+                        if(CommandControl==true) //si estamos en modo control y alguno de los elementos experimenta algun error no se sigue con el cálculo
+                        {
+                            if (DI.GetFiles().Count() > 1) //Si hay mas de 1 archivo dentro de la carpeta se ejecuta el programa
                             {
                                 //Cargar coberturas originales 
                                 List<Cobertura> Originales = new List<Cobertura>();
                                 (Originales, NombresCargados) = Operaciones.CargarCoberturas(DI, FL_IN);
-                                
+
                                 //1.4 - Cálculos
                                 //Originales (crear carpeta)
                                 Conjunto conjunto = new Conjunto(Originales, "original", FL_IN);
 
                                 //Flitrar permutaciones 
                                 Console.WriteLine();
-                                Console.WriteLine("Inicio del cáclulo...");
+                                Console.WriteLine("Inicio del cálculo...");
                                 Stopwatch stopwatch = Stopwatch.StartNew(); //Reloj para conocer el tiempo de ejecución
-                                //conjunto.GenerarListasIntersecciones();
+                                                                            //conjunto.GenerarListasIntersecciones();
                                 conjunto.FiltrarCombinaciones(); //Eliminamos las combinaciones que no van a generar una intersección
-                                                                 //conjunto.FiltrarCombinaciones_Experimental();
+                                                                    //conjunto.FiltrarCombinaciones_Experimental();
                                 stopwatch.Stop();
 
                                 Console.WriteLine();
@@ -186,10 +209,10 @@ namespace Berta
                                 double NumMuestras = conjunto.Combinaciones.Count();
                                 double MuestraSegundo = 163.371; //Valor empirico
                                 double tiempo = (NumMuestras / MuestraSegundo) / 60;
-                                double segundos = Math.Round(((Math.Round(tiempo, 2) - Math.Round(tiempo, 0)) * 60)+25,0);
+                                double segundos = Math.Round(((Math.Round(tiempo, 2) - Math.Round(tiempo, 0)) * 60) + 25, 0);
                                 if (segundos < 0)
                                     segundos = 0;
-                                Console.WriteLine("Se espera que el programa termine en unos " + Math.Round(tiempo, 0) + " minutos "+segundos+" segundos (" + DateTime.Now.ToString() + ")");
+                                Console.WriteLine("Se espera que el programa termine en unos " + Math.Round(tiempo, 0) + " minutos " + segundos + " segundos (" + DateTime.Now.ToString() + ")");
                                 Console.WriteLine();
                                 Console.WriteLine("Calculando...");
 
@@ -215,7 +238,7 @@ namespace Berta
                                 (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Anillos, CoberturaMaxima, epsilon_simple, Umbral_Areas); //Cálculo coberturas simples
 
                                 //FILTRAR AQUI ANILLOS (EVITAR ERRORES EN COBERTURA SIMPLE, POLIGONOS NO VÁLIDOS)
-                                if(Anillos!=null)
+                                if (Anillos != null)
                                 {
                                     foreach (Cobertura anillo in Anillos.A_Operar)
                                     {
@@ -232,7 +255,7 @@ namespace Berta
                                         }
                                     }
                                 }
-                                
+
 
                                 //Añadir coberturas simples (crear carpeta)
                                 var folder_Simples = new SharpKml.Dom.Folder();
@@ -256,12 +279,12 @@ namespace Berta
                                     folder_lvl.Id = "Multi-Cobertura-" + string.Format("{0:00}", Lvl);
 
                                     //Buscar anillo correspondiente al lvl 
-                                    if(Anillos!=null)
+                                    if (Anillos != null)
                                     {
                                         var anillo = Anillos.A_Operar.Where(x => x.tipo_multiple == Lvl).ToList()[0];
                                         folder_lvl.AddFeature(anillo.CrearDocumentoSharpKML());
                                     }
-                                    
+
                                     //Añadir multicoberturas
                                     foreach (Cobertura cob in con.A_Operar)
                                         folder_lvl.AddFeature(cob.CrearDocumentoSharpKML());
@@ -299,15 +322,11 @@ namespace Berta
                             {
                                 Console.WriteLine();
                                 Console.WriteLine("Esta carpeta no contiene suficientes archivos para realizar los cálculos");
-                                Console.ReadLine();
+                                Operaciones.EscribirOutput(args, "Error en directorio de entrada, no hay suficientes elementos");
+                                if(CvsM==0)
+                                    Console.ReadLine();
                             }
                         }
-
-                        //catch (Exception e)
-                        //{
-                        //    Console.WriteLine(e.Message);
-                        //    Console.ReadLine();
-                        //} //Parte1 - Cargar ficheros de entrada, FL y ejecutar cálculos
 
                         if (parte1) //Si y solo si la parte1 ha sido ejecutada con éxito ejecutamos la parte2
                         {
@@ -335,12 +354,26 @@ namespace Berta
                             Console.WriteLine();
 
                             //2.1 - Nombre de proyecto
-                            Console.WriteLine("Introduzca nombre del proyecto (si no introduce ninguno se creara uno por defecto):");
-                            string NombreProyecto = Console.ReadLine();
-                            if (NombreProyecto == "") //Nombre por defecto
+                            string NombreProyecto = "";
+                            if (CvsM == 0) //Menú
                             {
-                                NombreProyecto = NombrePredeterminado;
+                                Console.WriteLine("Introduzca nombre del proyecto (si no introduce ninguno se creara uno por defecto):");
+                                NombreProyecto = Console.ReadLine();
+                                if (NombreProyecto == "") //Nombre por defecto
+                                {
+                                    NombreProyecto = NombrePredeterminado;
+                                }
                             }
+                            else //Comando
+                            {
+                                if (args[4] == "-") //Nombre por defecto
+                                {
+                                    NombreProyecto = NombrePredeterminado;
+                                }
+                                else
+                                    NombreProyecto = args[4];
+                            }
+                            
 
                             //2.2 - Crear documento para exportar
                             var Doc = new SharpKml.Dom.Document(); //se crea documento
@@ -381,83 +414,139 @@ namespace Berta
                                 Console.WriteLine();
 
                                 //2.3 - Directorio de salida
-                                string Directorio_OUT = Operaciones.Menu_DirectorioOUT(Directorio_IN, Umbral_Areas, Trans, NombresCargados, Segs, TiempoEjecución_Parte2, NombreProyecto);
-                                //Console.WriteLine("Directorio de salida");
-                                //string Directorio_OUT = Console.ReadLine();
-                                //Console.WriteLine();
+                                string Directorio_OUT = "";
+                                if (CvsM == 0)
+                                    Directorio_OUT = Operaciones.Menu_DirectorioOUT(Directorio_IN, Umbral_Areas, Trans, NombresCargados, Segs, TiempoEjecución_Parte2, NombreProyecto);
+                                else
+                                    Directorio_OUT = Operaciones.Comando_DirectorioOUT(args[5]);
 
                                 //2.4 - Exportar proyecto
-                                int Control = Operaciones.CrearKML_KMZ(Doc, NombreProyecto, "Temporal", Directorio_OUT); //Se crea un kml temporal para después crear KMZ
-                                if (Control == 0)
+                                if(Directorio_OUT!=null) //Control (sobretodo en versión comando)
                                 {
-                                    Console.WriteLine("Exportado con exito!");
-                                    Console.WriteLine();
-                                    Console.WriteLine("Nombre del archivo: " + NombreProyecto + ".kmz");
-                                    Console.ReadLine();
-                                    Control_CM_Parte2 = 0; //Finalizar bucle
-                                }
-                                else
-                                {
-                                    Console.WriteLine("Directorio de destino no válido, no puede contener puntos (.)");
-                                    Console.WriteLine();
-                                    Console.WriteLine("Enter para continuar");
-                                    Console.ReadLine();
-                                }
-                            }
-                        } //Parte2 - Guardar fichero en carpeta salida, obtener nombre de proyecto
-                    }//Cáclulo de multicobertura
-                    else if (Control_M == 2) //Filtrado SACTA
-                    {
-                        //try
-                        {
-                            Console.Clear();
-                            Console.WriteLine("Berta T");
-                            Console.WriteLine();
-                            Console.WriteLine("2 - Filtrado SACTA");
-
-                            (DirectoryInfo Directorio_Cobertura, string path_Cob) = Operaciones.Menu_DirectorioIN_SACTA();
-
-                            //Si solo hay un solo archivo en la carpeta se cargará ese, sinó se le dara al usuarió la oportunidad de elegir cual.
-                            //También puede seleccionar la opción de ejecutar el filtro sobre todos los archivos de la carpeta
-
-                            List<Cobertura> Coberturas = new List<Cobertura>();
-                            List<string> NombresCargados = new List<string>();
-
-                            //Cargar todos los archivos de la carpeta
-                            (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null);
-
-                            //Actualizar nombres en coberturas (FL)
-                            int i = 0;
-                            foreach(Cobertura cob in Coberturas)
-                            {
-                                try
-                                {
-                                    cob.FL = NombresCargados[i].Split('-')[1];
-                                }
-                                catch 
-                                {
-                                    try
+                                    int Control = Operaciones.CrearKML_KMZ(Doc, NombreProyecto, "Temporal", Directorio_OUT); //Se crea un kml temporal para después crear KMZ
+                                    if (Control == 0)
                                     {
-                                        cob.FL = NombresCargados[i].Split('_').Last();
+                                        Console.WriteLine("Exportado con exito!");
+                                        Console.WriteLine();
+                                        Console.WriteLine("Nombre del archivo: " + NombreProyecto + ".kmz");
+                                        if (CvsM == 0)
+                                        {
+                                            Console.WriteLine("Enter para continuar");
+                                            Console.ReadLine();
+                                        }
+                                        Control_CM_Parte2 = 0; //Finalizar bucle
+                                        Operaciones.EscribirOutput(args, "CORRECTO");
                                     }
-                                    catch 
+                                    else if (CvsM == 0)
                                     {
-                                        Console.WriteLine("Error en formato de entrada de los archivos, el separador del FL debería ser '-' o '_' (NOMBRE-FLXXX o NOMBRE_FLXXX)");
-                                        Console.WriteLine("Error en: "+NombresCargados[i]);
+                                        Console.WriteLine("Directorio de destino no válido, no puede contener puntos (.)");
                                         Console.WriteLine();
                                         Console.WriteLine("Enter para continuar");
                                         Console.ReadLine();
                                     }
-                                }   
-                                i++;
-                            }
-
-                            if (Directorio_Cobertura.GetFiles().Count()>=1) //Minimo un archivo
-                            {
-                                bool Control_DC = false; //Bucle para cargar
-                                while (Control_DC==false)
+                                }
+                                else //Si se produce un error en el comando con el directorio de salida, se guardará el resultado en la carpeta temporal
                                 {
-                                    //try
+                                    int Control = Operaciones.CrearKML_KMZ(Doc, NombreProyecto, "Temporal", @"Temporal"); //Se crea un kml temporal para después crear KMZ
+                                    if (Control == 0)
+                                    {
+                                        Console.WriteLine("Exportado con exito en la carpeta Temporal (Berta Tools VX.X/Temporal)!");
+                                        Console.WriteLine();
+                                        Console.WriteLine("Nombre del archivo: " + NombreProyecto + ".kmz");
+                                        if (CvsM == 0)
+                                        {
+                                            Console.WriteLine("Enter para continuar");
+                                            Console.ReadLine();
+                                        }
+                                        else
+                                        {
+                                            System.Threading.Thread.Sleep(2000);
+                                            Operaciones.EscribirOutput(args, "Exportado en carpeta @Temporal");
+                                        }
+                                        Control_CM_Parte2 = 0; //Finalizar bucle
+                                    }
+                                    else //A este else nunca debería entrar, por si acaso lo dejo
+                                    {
+                                        Console.WriteLine("Directorio de destino no válido, no puede contener puntos (.)");
+                                        Console.WriteLine();
+                                        if (CvsM == 0)
+                                        {
+                                            Console.WriteLine("Enter para continuar");
+                                            Console.ReadLine();
+                                        }
+                                        else
+                                        {
+                                            System.Threading.Thread.Sleep(2000);
+                                            Operaciones.EscribirOutput(args, "Error en directorio de salida (BAD)");
+                                        }
+                                            
+                                    }
+                                }
+                            }
+                        } //Parte2 - Guardar fichero en carpeta salida, obtener nombre de proyecto
+
+                        args = new string[0];
+
+                    }//Cáclulo de multicobertura
+                    else if (Control_M == 2) //Filtrado SACTA
+                    {
+                        Console.Clear();
+                        Console.WriteLine("Berta T");
+                        Console.WriteLine();
+                        Console.WriteLine("2 - Filtrado SACTA");
+
+                        DirectoryInfo Directorio_Cobertura;
+                        string path_Cob;
+
+                        if((args.Count() ==4)||(CvsM==0))
+                        {
+                            //1 obtener directorio de entrada
+                            if (CvsM == 0)
+                                (Directorio_Cobertura, path_Cob) = Operaciones.Menu_DirectorioIN_SACTA();
+                            else //formato comando
+                                (Directorio_Cobertura, path_Cob) = Operaciones.Comando_DirectorioIN(args);
+
+                            //Si solo hay un solo archivo en la carpeta se cargará ese, sinó se le dara al usuarió la oportunidad de elegir cual.
+                            //También puede seleccionar la opción de ejecutar el filtro sobre todos los archivos de la carpeta
+
+                            if (Directorio_Cobertura != null) //Control para la visualización comando
+                            {
+                                List<Cobertura> Coberturas = new List<Cobertura>();
+                                List<string> NombresCargados = new List<string>();
+
+                                //Cargar todos los archivos de la carpeta
+                                (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null);
+
+                                //Actualizar nombres en coberturas (FL)
+                                int i = 0;
+                                foreach (Cobertura cob in Coberturas)
+                                {
+                                    try
+                                    {
+                                        cob.FL = NombresCargados[i].Split('-')[1];
+                                    }
+                                    catch
+                                    {
+                                        try
+                                        {
+                                            cob.FL = NombresCargados[i].Split('_').Last();
+                                        }
+                                        catch
+                                        {
+                                            Console.WriteLine("Error en formato de entrada de los archivos, el separador del FL debería ser '-' o '_' (NOMBRE-FLXXX o NOMBRE_FLXXX)");
+                                            Console.WriteLine("Error en: " + NombresCargados[i]);
+                                            Console.WriteLine();
+                                            Console.WriteLine("Enter para continuar");
+                                            Console.ReadLine();
+                                        }
+                                    }
+                                    i++;
+                                }
+
+                                if (Directorio_Cobertura.GetFiles().Count() >= 1) //Minimo un archivo
+                                {
+                                    bool Control_DC = false; //Bucle para cargar
+                                    while (Control_DC == false)
                                     {
                                         Console.Clear();
                                         Console.WriteLine("Berta T");
@@ -479,9 +568,11 @@ namespace Berta
                                         Console.WriteLine("¿Desea ejecutar el filtrado en todos los kmz dentro de la carpeta? (0 para si)");
                                         Console.WriteLine("Si solo desea ejecutar el fitrado sobre un solo kmz introduzca el identificador");
                                         Console.WriteLine("-1 para cambiar de directorio");
-                                        int Control_DC_n = Convert.ToInt32(Console.ReadLine());
+                                        int Control_DC_n = 0;
+                                        if (CvsM == 0)
+                                            Control_DC_n = Convert.ToInt32(Console.ReadLine());
 
-                                        if(Control_DC_n == 0) //Ejecutar toda la carpeta
+                                        if (Control_DC_n == 0) //Ejecutar toda la carpeta, si estamos en visualización de comando también se ejecuta toda la carpeta
                                         {
                                             Control_DC = true; //terminamos bucle
                                         }
@@ -491,14 +582,14 @@ namespace Berta
                                             Console.WriteLine("Directorio de cobertura a filtrar:");
                                             //path_Cob = Console.ReadLine();
                                             //Directorio_Cobertura = new DirectoryInfo(path_Cob);
-                                            (Directorio_Cobertura,  path_Cob) = Operaciones.Menu_DirectorioIN_SACTA();
+                                            (Directorio_Cobertura, path_Cob) = Operaciones.Menu_DirectorioIN_SACTA();
                                             (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null); //Cargamos coberturas de los archivos de esa carpeta
-                                            //Seguimos con el bucle
+                                                                                                                                      //Seguimos con el bucle
                                         }
                                         else if (Control_DC_n - 1 <= Directorio_Cobertura.GetFiles().Count())//Archivo en concreto Si el Control_DC_n es un archivo válido
                                         {
                                             Control_DC = true; //terminamos bucle
-                                            //Extraemos info de indice seleccionado
+                                                               //Extraemos info de indice seleccionado
                                             List<Cobertura> Seleccionada = new List<Cobertura>();
                                             Seleccionada.Add(Coberturas[Control_DC_n - 1]);
                                             Coberturas = Seleccionada;
@@ -510,109 +601,96 @@ namespace Berta
                                         {
                                             Console.WriteLine();
                                             Console.WriteLine("Identificador no válido");
+                                            Console.WriteLine("Enter para continuar");
                                             Console.ReadLine();
                                             //Seguimos el bucle
                                         }
                                     }
-                                    //catch (Exception e)
-                                    //{
-                                    //    Console.WriteLine(e.Message);
-                                    //    Console.WriteLine();
-                                    //    Console.WriteLine("Enter para continuar");
-                                    //    Console.ReadLine();
-                                    //}
                                 }
-                            }
 
-                            Conjunto conjuntoAfiltrar = new Conjunto(Coberturas, "original", "FL999");
-                            //try
-                            {
-                                //Obtenemos el filtro SACTA
-                                //Console.Clear();
-                                //Console.WriteLine("Berta T");
-                                //Console.WriteLine();
-                                //Console.WriteLine("2 - Filtrado SACTA");
-                                //Console.WriteLine();
-                                //Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
-                                //Console.WriteLine();
-                                //Console.WriteLine("Archivos cargados:");
-                                //foreach (string Nom in NombresCargados)
-                                //{
-                                //    Console.WriteLine(Nom);
-                                //}
-                                //Console.WriteLine();
-                                //Console.WriteLine("Directorio completo del kmz con el filtro SACTA:");
-                                //string path_SACTA = Console.ReadLine();
+                                Conjunto conjuntoAfiltrar = new Conjunto(Coberturas, "original", "FL999");
 
-                                ////Abrir KML
-                                //(FileStream H, string Nombre) = Operaciones.AbrirKMLdeKMZ(path_SACTA);
-                                //List<Geometry> Poligonos = Operaciones.TraducirPoligono(H, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
-                                //Cobertura Filtro_SACTA = new Cobertura("Filtro", "FL999", "original", Poligonos); //Cobertura donde guardaremos el filtro SACTA seleccionado
+                                Cobertura Filtro_SACTA = null; string path_SACTA = null;
 
                                 //Cargar filtro SACTA
-                                (Cobertura Filtro_SACTA, string path_SACTA) = Operaciones.Menu_DirectorioSACTA_SACTA(NombresCargados, path_Cob);
+                                (Filtro_SACTA, path_SACTA) = Operaciones.Menu_DirectorioSACTA_SACTA(NombresCargados, path_Cob, CvsM, args);
 
-                                //Ejecutar filtrado
-                                Conjunto Filtrado = conjuntoAfiltrar.Aplicar_SACTA(Filtro_SACTA);
+                                if (Filtro_SACTA != null)
+                                {
+                                    //Ejecutar filtrado
+                                    Conjunto Filtrado = conjuntoAfiltrar.Aplicar_SACTA(Filtro_SACTA);
 
-                                //Obtener directorio de salida
-                                Console.Clear();
-                                Console.WriteLine("Berta T");
-                                Console.WriteLine();
-                                Console.WriteLine("2 - Filtrado SACTA");
-                                Console.WriteLine();
-                                Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
-                                Console.WriteLine();
-                                Console.WriteLine("Directorio completo del kmz de filtros SACTA: " + path_SACTA);
+                                    //Obtener directorio de salida
+                                    Console.Clear();
+                                    Console.WriteLine("Berta T");
+                                    Console.WriteLine();
+                                    Console.WriteLine("2 - Filtrado SACTA");
+                                    Console.WriteLine();
+                                    Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
+                                    Console.WriteLine();
+                                    Console.WriteLine("Directorio completo del kmz de filtros SACTA: " + path_SACTA);
 
-                                Operaciones.Menu_DirectorioOUT_SACTA(path_Cob, path_SACTA, Filtrado);
+                                    int C =Operaciones.Menu_DirectorioOUT_SACTA(path_Cob, path_SACTA, Filtrado, CvsM, args);
+                                    if(C==0)
+                                    {
+                                        Console.WriteLine("Exportado con exito!");
 
-                                //Console.WriteLine();
-                                //Console.WriteLine("Directorio para exportar:");
-                                //string path_Exp = Console.ReadLine();
+                                        if (CvsM == 0)
+                                        {
+                                            Console.WriteLine("Enter para continuar");
+                                            Console.ReadLine();
+                                        }
+                                        else
+                                        {
+                                            Operaciones.EscribirOutput(args, "CORRECTO");
+                                            System.Threading.Thread.Sleep(2000);
+                                        }
+                                    }
+                                }
 
-                                ////Exportar //REWORK
-                                //int Control_CM_Parte2 = -1;
-                                //while (Control_CM_Parte2!=0) 
-                                //{
-                                //    foreach (Cobertura Cob in Filtrado.A_Operar)
-                                //    {
-                                //        var doc = Cob.CrearDocumentoSharpKML();
-
-                                //        int Control = Operaciones.CrearKML_KMZ(doc, doc.Name, "Temporal", path_Exp); //Se crea un kml temporal para después crear KMZ
-                                //        if (Control == 0)
-                                //        {
-                                //            Control_CM_Parte2 = 0; //Finalizar bucle
-                                //        }
-                                //        else
-                                //        {
-                                //            Console.WriteLine("Directorio de destino no válido, no puede contener puntos (.)");
-                                //            Console.WriteLine();
-                                //            Console.WriteLine("Enter para continuar");
-                                //            Console.ReadLine();
-                                //        }
-                                //    }
-                                //}
-                                Console.WriteLine("Exportado con exito!");
-                                Console.ReadLine();
                             }
-                            //catch (Exception e)
-                            //{
-                            //    Console.WriteLine(e.Message);
-                            //    Console.WriteLine();
-                            //    Console.WriteLine("Enter para continuar");
-                            //    Console.ReadLine();
-                            //}
+                        }
+                        else 
+                        {
+                            Console.WriteLine();
+                            Console.WriteLine("El comando no cumple las caracterisitcas necesarias para ejecutar esta orden");
+                            Operaciones.EscribirOutput(args, "Comando no válido, insuficientes argumentos");
+                            System.Threading.Thread.Sleep(2000);
+                        }
+                        
+                        
 
-                        } //Try general
-                        //catch (Exception e)
-                        //{
-                        //    Console.WriteLine(e.Message);
-                        //    Console.WriteLine();
-                        //    Console.WriteLine("Enter para continuar");
-                        //    Console.ReadLine();
-                        //}
                     } //Filtrado SACTA
+                    else if (Control_M == 3)
+                    {
+                        string NombrePredeterminado = "Cobertura Mínima"; //String para guardar un nombre de proyecto predeterminado
+                        string Directorio_IN = ""; //Directorio de entrada
+                        List<string> NombresCargados = new List<string>(); //Lista donde se guardan los nombres de los archivos cargados.
+                        DirectoryInfo DI = null;
+
+                        if (CvsM == 0)
+                        {
+                            (DI, Directorio_IN) = Operaciones.Menu_DirectorioIN("FL999");
+                        }
+                        else if(args.Count()==3)
+                        {
+                            (DI, Directorio_IN) = Operaciones.Comando_DirectorioIN(args);
+                        }
+
+                        if(Directorio_IN!=null)
+                        {
+                            if (DI.GetFiles().Count() > 1) //Si hay mas de 1 archivo dentro de la carpeta se ejecuta el programa
+                            {
+                                //Cargar coberturas originales 
+                                List<Cobertura> Originales = new List<Cobertura>();
+                                (Originales, NombresCargados) = Operaciones.CargarCoberturas(DI, "FL999");
+                                Conjunto conjunto = new Conjunto(Originales, "CoberturaMinima", "FL999");
+                                conjunto.ActualizarFL(NombresCargados);
+                                conjunto.CalcularCoberturaMinima();
+                            }
+                        }
+                        
+                    }
                     else if (Control_M == 5)//Ajustes
                     {
                         int Control_A = -1;
@@ -641,6 +719,21 @@ namespace Berta
                                     Console.WriteLine();
                                     Console.WriteLine("5 - Ajustes: 1 - Seleccionar comando/menú");
                                     Console.WriteLine();
+                                    Console.WriteLine("0 = Menú 1 = Comandos");
+                                    int Resultado = Convert.ToInt32(Console.ReadLine());
+                                    if(Resultado<=1)
+                                    {
+                                        CvsM = Resultado;
+                                        Operaciones.GuardarAjustes(CvsM, epsilon, epsilon_simple);
+                                        Console.WriteLine();
+                                        Console.WriteLine("Formato de control actualizado.");
+                                        Console.ReadLine();
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("Error");
+                                        Console.ReadLine();
+                                    }
 
                                 }//cambiar de version comando/menu
                                 else if(Control_A == 2) //modificar tolerancia multiple
@@ -726,9 +819,20 @@ namespace Berta
                 {
                     Console.WriteLine(e.Message);
                     Console.WriteLine();
-                    Console.WriteLine("Enter para continuar");
-                    Console.ReadLine();
-                    Control_M = -1; //Sigue el buclce
+                    if (CvsM == 0)
+                    {
+                        Console.WriteLine("Enter para continuar");
+                        Console.ReadLine();
+                        Control_M = -1; //Sigue el buclce
+                    }
+                    else if(A)
+                    {
+                        Control_M = 0;
+                    }
+                    else
+                        Control_M = -1; //Sigue el buclce
+
+
                 }
             }
         }

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,6 +21,7 @@ namespace Berta
         public string Identificador; //Identificador (opcional)
         public string FL; //FL del conjunto
         public List<string> Combinaciones = new List<string>(); //Numero de combinaciones generadoras de intersecciones
+
 
         /// <summary>
         /// Constructor simple
@@ -524,6 +526,44 @@ namespace Berta
             Conjunto R = new Conjunto(Filtradas, "Filtradas", "FL999");
 
             return R;
+        }
+
+        public void ActualizarFL(List<string> NombresConFl)
+        {
+            if(NombresConFl.Count()==this.A_Operar.Count)
+            {
+                foreach(Cobertura C in this.A_Operar)
+                {
+                    C.FL = NombresConFl[A_Operar.IndexOf(C)].Split("-")[1];
+                    Match m = Regex.Match(C.FL, "(\\d+)");
+                    C.orden = Convert.ToInt32(m.Value);
+                }
+
+               this.A_Operar = this.A_Operar.OrderBy(x => x.orden).ToList();
+            }
+        }
+
+        public Conjunto CalcularCoberturaMinima()
+        {
+            List<Cobertura> Base = this.A_Operar.Where(x => x.FL == this.A_Operar[0].FL).ToList(); //Extraemos todas las coberturas de FL mas bajo
+            this.A_Operar.RemoveRange(this.A_Operar.IndexOf(Base[0]),Base.Count());
+            Cobertura Trama = FormarCoberturaTotal();
+
+            Conjunto LvLResultante = new Conjunto();
+            LvLResultante.FL = Base[0].FL;
+            var Doc = new SharpKml.Dom.Document();
+            foreach (Cobertura C in Base)
+            {
+                C.Area_Operaciones=C.Area_Operaciones.Difference(Trama.Area_Operaciones);
+                LvLResultante.A_Operar.Add(C);
+                Doc.AddFeature(C.CrearDocumentoSharpKML());
+            }
+            LvLResultante.A_Operar.Add(Trama);
+            Doc.AddFeature(Trama.CrearDocumentoSharpKML());
+
+            Operaciones.CrearKML_KMZ(Doc, "TEST COBERTURA MINIMA", "Temporal", @"Temporal");
+
+            return null;
         }
     }
 

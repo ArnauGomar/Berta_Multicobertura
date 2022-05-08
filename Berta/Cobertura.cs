@@ -21,6 +21,8 @@ namespace Berta
 
         public List<int> InterseccionesLista = new List<int>(); //Lista de 0,1 (y -1 cuando es la misma cobertura) para definir la intersección entre esta cobertura y las otras de un conjunto
 
+        public int orden; //Orden dentro de un conjunto de cobertura mínima.
+
         //Constructores
         /// <summary>
         /// Constructor simple
