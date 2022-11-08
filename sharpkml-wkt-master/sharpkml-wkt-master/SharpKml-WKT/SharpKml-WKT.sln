@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28010.2050
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpKml-WKT", "SharpKml-WKT\SharpKml-WKT.csproj", "{ED7B1AFC-E4C0-4235-9A7C-2E3FE428BE20}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{ED7B1AFC-E4C0-4235-9A7C-2E3FE428BE20}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED7B1AFC-E4C0-4235-9A7C-2E3FE428BE20}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED7B1AFC-E4C0-4235-9A7C-2E3FE428BE20}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED7B1AFC-E4C0-4235-9A7C-2E3FE428BE20}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3FE8BA3B-A916-4563-940A-553C978862F6}
+	EndGlobalSection
+EndGlobal

@@ -1,4 +1,5 @@
 ﻿using NetTopologySuite.Geometries;
+using NetTopologySuite.IO;
 using NetTopologySuite.Operation.Union;
 using NetTopologySuite.Precision;
 using SharpKml.Engine;
@@ -7,8 +8,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+
 namespace Berta
 {
     using Point = Tuple<double, double>; //Necesario para algoritmo RamerDouglasPeucker
@@ -35,6 +38,82 @@ namespace Berta
                 //Guardar Documento dentro del KML y exportar
                 var kml = new SharpKml.Dom.Kml();
                 kml.Feature = Doc; //DOCUMENTO
+                                   //kml.Feature = placemark; //Se puede guardar directamente un placemark
+                KmlFile kmlfile = KmlFile.Create(kml, true);
+
+                //Eliminar archivo si existe (NO TIENE QUE EXISTIR, CATCH INTERNO)
+                if (File.Exists(path))
+                {
+                    // If file found, delete it    
+                    File.Delete(path);
+                }
+
+                using (var stream = File.OpenWrite(path)) //Path de salida
+                {
+                    kmlfile.Save(stream);
+                }
+
+
+                //Eliminar archivo en destino 
+                if (File.Exists(path_destino))
+                {
+                    // If file found, delete it    
+                    File.Delete(path_destino);
+                }
+
+                //Crear KMZ
+                //Crear el archivo (si quieres puedes editar uno existente cambiando el modo a Update.
+                using (ZipArchive archive = System.IO.Compression.ZipFile.Open(path_destino, ZipArchiveMode.Create))
+                {
+                    archive.CreateEntryFromFile(path, Path.GetFileName(path));
+                }
+
+                //Eliminar archivo temporal
+                if (File.Exists(path))
+                {
+                    // If file found, delete it    
+                    File.Delete(path);
+                }
+
+                return 0;
+            }
+            catch
+            {
+                //Eliminar archivo temporal
+                if (File.Exists(path))
+                {
+                    // If file found, delete it    
+                    File.Delete(path);
+                }
+
+                //Eliminar archivo en destino 
+                if (File.Exists(path_destino))
+                {
+                    // If file found, delete it    
+                    File.Delete(path_destino);
+                }
+
+                return -1;
+            }
+
+
+        }
+
+        public static int CrearKML_KMZ(List<SharpKml.Dom.Folder> Carpetas, string NombreDoc, string carpeta, string Destino)
+        {
+            string path = Path.Combine(Path.Combine(@".\" + carpeta + "", NombreDoc + ".kml"));
+            string path_destino = Path.Combine(Path.Combine(Destino, NombreDoc + ".kmz"));
+
+            try
+            {
+                //Guardar Documento dentro del KML y exportar
+                var kml = new SharpKml.Dom.Kml();
+                SharpKml.Dom.Document DOC = new SharpKml.Dom.Document();
+                foreach(SharpKml.Dom.Folder Carpeta in Carpetas)
+                {
+                    DOC.AddFeature(Carpeta);
+                }
+                kml.Feature = DOC; //DOCUMENTO
                                    //kml.Feature = placemark; //Se puede guardar directamente un placemark
                 KmlFile kmlfile = KmlFile.Create(kml, true);
 
@@ -185,14 +264,13 @@ namespace Berta
         /// <param name="C"></param>
         /// <param name="Epsilon"></param>
         /// <returns></returns>
-        public static Geometry AplicarRamerDouglasPeucker(Coordinate[] C, double Epsilon)
+        public static Geometry AplicarRamerDouglasPeucker(Geometry In, double Epsilon)
         {
-
             //Solo si el area es superior a 0.1 consideramos válido el poligono. 
             //Eliminamos líneas erroneas dentro del propio poligono. 
 
             //Transformamos puntos NetTopology en Puntos RamerDouglas
-            List<Coordinate> CoordenadasIn = C.ToList();
+            List<Coordinate> CoordenadasIn = In.Coordinates.ToList();
             List<Point> PuntosIn = new List<Point>();
 
             foreach (Coordinate coordenada in CoordenadasIn)
@@ -232,6 +310,15 @@ namespace Berta
             return reducedGeom;
         } //Reducción de precisión de las coordenadas de los poligonos
 
+        public static Geometry ReducirPrecision(Geometry geom, int Cord)
+        {
+            var pm = new PrecisionModel(Cord); //10000
+
+            var reducedGeom = GeometryPrecisionReducer.Reduce(geom, pm);
+
+            return reducedGeom;
+        } //Reducción de precisión de las coordenadas de los poligonos
+
         /// <summary>
         /// Guarda los datos del CvsM, epsilon y epsilon_simple en un txt
         /// </summary>
@@ -253,10 +340,12 @@ namespace Berta
         /// <param name="DI"></param>
         /// <param name="FL_IN"></param>
         /// <returns></returns>
-        public static (List<Cobertura>,List<string>) CargarCoberturas (DirectoryInfo DI, string FL_IN)
+        public static (List<Cobertura>,List<string>) CargarCoberturas (DirectoryInfo DI, string FL_IN, string [] args, int CvsM)
         {
             List<Cobertura> Originales = new List<Cobertura>(); //Lista a retornar, coberturas
             List<string> NombresCargados = new List<string>(); //Lista a retornar, nombres
+            bool Empty = false; //Controlar el error de traducción de un poligono.
+            string FL_Obtenido = null;
 
             foreach (var file in DI.GetFiles())
             {
@@ -270,30 +359,61 @@ namespace Berta
                 if (V.Length > 1) //Nombre en formato XX_XXXXXXX-FLXXX
                 {
                     if (FL_IN == null)
-                        FL_IN = V[1];
+                    {
+                        FL_Obtenido = V[1];
+                    }
+                        
                     Nombre_sin_fl = V[0];
                 }
                 else
                 {
                     V = Nombre.Split('_'); //Nombre en formato XX_XXXXXXX_FLXXX
-                    if (Nombre.Split('_').Length > 1)
+                    if (V.Length > 1)
                     {
                         if (FL_IN == null)
-                            FL_IN = V.Last();
+                        {
+                            FL_Obtenido = V.Last();
+                        }
+                            
                         List<string> L = V.ToList();
                         L.Remove(V.Last());
                         Nombre_sin_fl = string.Join('_', L);
                     }
                 }
 
-                List<Geometry> Poligonos = TraducirPoligono(H, Nombre_sin_fl); //Carga kml, extrae en SharpKML y traduce a NTS
+                List<Geometry> Poligonos = TraducirPoligono(H, Nombre_sin_fl, args, CvsM, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
+                 
+                int k = 0; 
+                while((k<Poligonos.Count)&&(!Empty))
+                {
+                    if (Poligonos[k].IsEmpty == true)
+                        Empty = true;
+                    k++;
+                }
 
-                Originales.Add(new Cobertura(Nombre_sin_fl, FL_IN, "original", Poligonos));
-                Console.WriteLine(Nombre);
-                NombresCargados.Add(Nombre);
+                if(!Empty) //No hay error
+                {
+                    if (FL_IN != null)
+                        Originales.Add(new Cobertura(Nombre_sin_fl, FL_IN, "original", Poligonos));
+                    else
+                        Originales.Add(new Cobertura(Nombre_sin_fl, FL_Obtenido, "original", Poligonos));
+
+                    Console.WriteLine(Nombre);
+                    NombresCargados.Add(Nombre);
+                }
+                else //Hay error
+                {
+                    Console.WriteLine(Nombre+ " NO CARGADO");
+                    break;
+                }
+
             }
 
-            return (Originales, NombresCargados);
+            if (!Empty)
+                return (Originales, NombresCargados);
+            else
+                return (null, null);
+
         } //Carga las coberturas del fichero KML/KMZ
 
         /// <summary>
@@ -320,7 +440,27 @@ namespace Berta
                 }
                 else
                 {
-                    H = File.Open(Path.Combine(@".\Temporal", "doc.kml"), FileMode.Open); //Abrir KML generico 
+                    try
+                    {
+                        H = File.Open(Path.Combine(@".\Temporal", "doc.kml"), FileMode.Open); //Abrir KML generico 
+                    }
+                    catch //Posiblemente se ha cambiado el nombre del archivo a mano
+                    {
+                        string[] V = new string[2];
+                        string aBuscar = "";
+
+                        V = Nombre.Split('-');
+                        aBuscar = V[0];
+                        if(V.Count()==1)
+                        {
+                            V = Nombre.Split('_');
+                            aBuscar = V[1];
+                        }
+
+                        FileInfo[] TodosEnTemporal = TemporalC.GetFiles();
+                        FileInfo Buscado = TodosEnTemporal.Where(x => x.Name.Contains(aBuscar) == true).ToList()[0];
+                        H = File.Open(Buscado.FullName, FileMode.Open); 
+                    }
                 }
             }
             else //Abrir en formato kml
@@ -340,7 +480,7 @@ namespace Berta
         /// <param name="H"></param>
         /// <param name="FileName"></param>
         /// <returns></returns>
-        public static List<Geometry> TraducirPoligono (FileStream H, string FileName)
+        public static List<Geometry> TraducirPoligono (FileStream H, string FileName, string [] args, int CvsM, string NombreCompleto)
         {
             KmlFile F = KmlFile.Load(H); //Cargar KML
             H.Close();
@@ -353,6 +493,9 @@ namespace Berta
             }
 
             var polyGON = F.Root.Flatten().OfType<SharpKml.Dom.Polygon>().ToList(); //Extraer lista de poligonos del KML
+            var MpolyGON = F.Root.Flatten().OfType<SharpKml.Dom.MultipleGeometry>().ToList();
+
+            SharpKml.Dom.Document D = new SharpKml.Dom.Document();
 
             List<Geometry> Poligonos = new List<Geometry>(); //Lista donde se guardaran los poligonos
 
@@ -377,10 +520,24 @@ namespace Berta
                 }
                 //Crear poligono NetTopologySuite
                 var gf = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
-                Geometry poly_T = gf.CreatePolygon(Coordenades); //Poligono a computar!
+                Geometry poly_T = gf.CreateEmpty(Dimension.Curve);
 
-                //Implementación huecos
-                List<Geometry> Huecos = new List<Geometry>(); //Guardar huecos existentes
+                try
+                {
+                    poly_T = gf.CreatePolygon(Coordenades); //Poligono a computar!
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(NombreCompleto + " ERROR DE LECTURA POLIGONAL (" + e.Message+")");
+                    if (CvsM == 1)
+                        Operaciones.EscribirOutput(args, NombreCompleto + " ERROR DE LECTURA POLIGONAL (" + e.Message + ") NO SE HA EJECUTADO EL CÁLCULO");
+                    else
+                    {
+                        Console.ReadLine();
+                    }
+                        
+
+                }
 
                 if (poly.InnerBoundary != null)
                 {
@@ -406,14 +563,36 @@ namespace Berta
                         //Crear poligono NetTopologySuite
                         var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
                         Geometry poly_T_H = gff.CreatePolygon(Coordenadess); //Poligono a computar!
-                        poly_T = poly_T.Difference(poly_T_H);
+                        if(poly_T.Intersects(poly_T_H)==true) //Intersecta, por lo que esta dentro de los limites, es un hueco
+                            poly_T = poly_T.Difference(poly_T_H);
+                        else //No intersecta, por lo que es una parte exterior (otro poligono) del conjunto
+                            poly_T = poly_T.Union(poly_T_H);
+                        
                     }
                 }
 
                 Poligonos.Add(poly_T); //Añadir poligono a la lista para generar cobertura
+
             }
 
             return Poligonos;
+        }
+
+
+        public static Geometry RepararPoligono (Geometry Corrupta, GeometryFactory gff)
+        {
+            List<Geometry> Geometrias_extraidas = new List<Geometry>();
+            int i = 0; 
+            while(i< Convert.ToInt32(Corrupta.NumGeometries))
+            {
+                Geometrias_extraidas.Add(Corrupta.GetGeometryN(i));
+                i++;
+            }
+            CascadedPolygonUnion ExecutarUnion = new CascadedPolygonUnion(Geometrias_extraidas);
+            Geometry Area_NovTot_MP = ExecutarUnion.Union();
+            //List<Geometry> Geometrias_extraidas = (GeometryCollection)Corrupta.Geom
+            //return Reparada;
+            return Area_NovTot_MP;
         }
 
         /// <summary>
@@ -430,12 +609,14 @@ namespace Berta
             List<SharpKml.Dom.Folder> PorRadar = new List<SharpKml.Dom.Folder>(); //Carpeta de cada radar
 
             //Cobertura base
+
             foreach (Cobertura COB in conjunto.A_Operar)
             {
                 //Crear una carpeta para cada radar y añadir la cobertura base
                 PorRadar.Add(new SharpKml.Dom.Folder { Id = COB.nombre, Name = COB.nombre + " " + COB.FL, Visibility = false });
                 PorRadar.Last().AddFeature(COB.CrearDocumentoSharpKML());
             }
+            
 
             //Creamos carpetas por lvl de cada radar
             List<SharpKml.Dom.Folder> PorNivelPorRadar = new List<SharpKml.Dom.Folder>();
@@ -496,6 +677,124 @@ namespace Berta
             }
 
             return Redundados;
+        }
+
+        public static SharpKml.Dom.Folder CarpetaRedundados_CM(List<string> Nombres, List<Conjunto> AnillosFL, int FL_ini, int FL_fin, int FL_itera)
+        {
+            List<SharpKml.Dom.Folder> Carpetas_Radar = new List<SharpKml.Dom.Folder>(); //Carpeta de cada radar
+            List<string> Nombres_sin_fl = new List<string>();
+            SharpKml.Dom.Folder Carpeta_return = new SharpKml.Dom.Folder();
+            try
+            {
+                //Nombres.ForEach(x => Nombres_sin_fl.Add(string.Join("_", new string[2] { x.Split("_")[0], x.Split("_")[1] })));
+                foreach (string N in Nombres)
+                {
+                    List<string> Trozos = N.Split("_").ToList();
+                    Trozos.Remove(Trozos.Last());
+                    Nombres_sin_fl.Add(string.Join("_",Trozos));
+                }
+
+
+            }
+            catch
+            {
+                Nombres.ForEach(x => Nombres_sin_fl.Add(x.Split("-")[1]));
+            }
+
+            List<string> Nombres_finales = Nombres_sin_fl.Distinct().ToList(); //Quitamos los repetidos
+            Nombres_finales.ForEach(x => Carpetas_Radar.Add(new SharpKml.Dom.Folder { Id = x, Name = x, Visibility = false })); //Creamos carpetas de cada radar
+
+            //Creamos carpetas de cada radar, seleccionamos último FL ya que debería contener todos los radares (no tiene porque)
+            //foreach (Cobertura cob in AnillosFL.Last().A_Operar)
+            //{
+            //    if (cob.tipo_multiple == 0) //Para coberturas simples ejecutamos la creación de carpeta normal
+            //    {
+            //        if(Carpetas_Radar.Where(x => x.Name == cob.nombre).ToList().Count == 0) //Si no existe ninguna carpeta ya de ese radar
+            //                {
+            //            Carpetas_Radar.Add(new SharpKml.Dom.Folder { Id = cob.nombre, Name = cob.nombre, Visibility = false });
+            //        }
+            //    }
+            //    else
+            //    {
+            //        if (Carpetas_Radar.Count() > 0) //Si existen elementos
+            //        {
+            //            string[] Nombres = cob.nombre.Split(".");
+            //            foreach (string Nombre in Nombres)
+            //            {
+            //                if (Carpetas_Radar.Where(x => x.Name == Nombre).ToList().Count == 0) //Si no existe ninguna carpeta ya de ese radar
+            //                {
+            //                    Carpetas_Radar.Add(new SharpKml.Dom.Folder { Id = Nombre, Name = Nombre, Visibility = false });
+            //                }
+            //            }
+            //        }
+            //        else
+            //        {
+            //            string[] Nombres = cob.nombre.Split(".");
+            //            foreach (string Nombre in Nombres)
+            //            {
+            //                Carpetas_Radar.Add(new SharpKml.Dom.Folder { Id = Nombre, Name = Nombre, Visibility = false });
+            //            }
+            //        }
+            //    }
+            //}
+
+            //Ahora, para cada radar buscaremos todas las coberturas implicadas de los distintos FL
+            foreach (SharpKml.Dom.Folder Radar in Carpetas_Radar)
+            {
+                List<SharpKml.Dom.Folder> FLs = new List<SharpKml.Dom.Folder>();
+                while(FL_ini<=FL_fin) //Mientras no lleguemos al último FL.
+                {
+                    string FLXXX = "";
+                    if (FL_ini < 10)
+                        FLXXX = "FL00" + FL_ini;
+                    else if (FL_ini < 100)
+                        FLXXX = "FL0" + FL_ini;
+                    else
+                        FLXXX = "FL" + FL_ini;
+
+                    //Seleccionamos todas las coberturas de ese FL que corresponden al radar buscado
+                    List<Cobertura> Coberturas_FL = AnillosFL.Where(x => x.FL == FLXXX).ToList()[0].A_Operar.Where(y => ((y.nombre == Radar.Name) || (y.nombre.Split(".").Contains(Radar.Name) == true))).ToList();
+                    List<Cobertura> Coberturas_FL2 = new List<Cobertura>();
+                    FLs.Add(new SharpKml.Dom.Folder { Id = FLXXX, Name = FLXXX, Visibility = false }); //Generamos carpetas para FL y guardamos info en ella
+                    foreach(Cobertura cob in Coberturas_FL)
+                    {
+                        FLs.Last().AddFeature(cob.CrearDocumentoSharpKML());
+                    }
+
+                    FL_ini = FL_ini + FL_itera;
+                }
+
+                //Añadimos carpetas a la carpeta del radar.
+                foreach (SharpKml.Dom.Folder FL in FLs)
+                    Radar.AddFeature(FL);
+
+                Carpeta_return.AddFeature(Radar);
+            }
+
+            //Para cada radar, creamos
+
+
+
+            //SharpKml.Dom.Folder Redundados = new SharpKml.Dom.Folder { Id = "Redundantes", Name = "Cobertura mínima por radar", Visibility = false }; //Carpeta donde se guardaran los resultados radar a radar
+            //List<SharpKml.Dom.Folder> PorRadar = new List<SharpKml.Dom.Folder>(); //Carpeta de cada radar
+
+            //foreach (Conjunto anillo in AnillosFL)
+            //{
+            //    foreach (Cobertura cob in anillo.A_Operar)
+            //    {
+            //        if(PorRadar.Count==0) //Si no existe ninguna carpeta
+            //        {
+            //            if(cob.tipo_multiple==0) //Cobertura simple
+            //            {
+            //                PorRadar.Add(new SharpKml.Dom.Folder { Id = cob.nombre, Name = cob.nombre + " " + cob.FL, Visibility = false });
+            //                PorRadar.Last()
+            //            }
+            //        }
+            //    }
+            //}
+
+
+            return Carpeta_return; 
         }
 
         /// <summary>
@@ -599,7 +898,7 @@ namespace Berta
         /// </summary>
         /// <param name="FL"></param>
         /// <returns></returns>
-        public static (DirectoryInfo, string) Menu_DirectorioIN(string FL) //Preguntar directiorio de entrada
+        public static (DirectoryInfo, string) Menu_DirectorioIN(string FL, int mode) //Preguntar directiorio de entrada
         {
             Console.WriteLine();
             string Directorio_IN = null;
@@ -613,15 +912,53 @@ namespace Berta
                 try
                 {
                     DI = new DirectoryInfo(Directorio_IN);
-                    int control = DI.GetFiles().Count();
+                    int control = 0;
+                    if (mode == 1)
+                        control = DI.GetFiles().Count();
+                    else
+                    {
+                        control = DI.GetDirectories().Length; //Para comprovar que hay directorios y no ficheros (cobertura mínima)
+                        if(control==0)
+                        {
+                            control = DI.GetFiles().Count();
+                        }
+                    }
+                        
                     if (control != 0)
                         Correcto = true;
                     else
                     {
+                        if(mode == 1)
+                        {
+                            Console.WriteLine();
+                            Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                            Console.WriteLine("DEBUG: Carpeta vacía");
+                            Console.ReadLine();
+                            Console.Clear();
+                            Console.WriteLine("Berta T");
+                            Console.WriteLine();
+                            Console.WriteLine("1 - Cálculo de multi-coberturas");
+                            Console.WriteLine();
+                            Console.WriteLine("FL seleccionado: " + FL);
+                            Console.WriteLine();
+                        }
+                        else
+                        {
+                            Console.WriteLine();
+                            Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                            Console.WriteLine("DEBUG: Carpeta vacía");
+                            Console.WriteLine();
+
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    if (mode == 1)
+                    {
                         Console.WriteLine();
                         Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
-                        Console.WriteLine("DEBUG: Carpeta vacía");
-                        Console.ReadLine();
+                        Console.WriteLine("DEBUG: " + e.Message);
                         Console.Clear();
                         Console.WriteLine("Berta T");
                         Console.WriteLine();
@@ -630,20 +967,13 @@ namespace Berta
                         Console.WriteLine("FL seleccionado: " + FL);
                         Console.WriteLine();
                     }
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine();
-                    Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
-                    Console.WriteLine("DEBUG: "+ e.Message);
-                    Console.ReadLine();
-                    Console.Clear();
-                    Console.WriteLine("Berta T");
-                    Console.WriteLine();
-                    Console.WriteLine("1 - Cálculo de multi-coberturas");
-                    Console.WriteLine();
-                    Console.WriteLine("FL seleccionado: " + FL);
-                    Console.WriteLine();
+                    else
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("Error con el directorio de entrada, no puede contener puntos (.)");
+                        Console.WriteLine("DEBUG: " + e.Message);
+                        Console.WriteLine();
+                    }
                 }
             }
 
@@ -666,7 +996,12 @@ namespace Berta
             try
             {
                 DI = new DirectoryInfo(Directorio_IN);
-                int control = DI.GetFiles().Count();
+                int control = 0;
+                if (Convert.ToInt32(args[0]) != 3)
+                    control = DI.GetFiles().Count();
+                else
+                    control = DI.GetDirectories().Length;
+
                 if (control != 0)
                     return (DI, Directorio_IN);
                 else
@@ -805,6 +1140,39 @@ namespace Berta
         }
 
         /// <summary>
+        /// Parte del menú que pregunta por el directorio de salida, MODO COBERTURA MÍNIMA
+        /// </summary>
+        /// <returns></returns>
+        public static string Menu_DirectorioOUT() //Preguntar directiorio de entrada
+        {
+            Console.WriteLine();
+            string Directorio_OUT = null;
+            DirectoryInfo DO = new DirectoryInfo(@".\Temporal");
+            bool Correcto = false;
+            while (!Correcto)
+            {
+                Console.WriteLine("Directorio de salida, (no puede contener puntos (.))");
+                Directorio_OUT = Console.ReadLine();
+                try
+                {
+                    DO = new DirectoryInfo(Directorio_OUT);
+                    DO.GetFiles().Count();
+                    Correcto = true;
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Error con el directorio de salida, no puede contener puntos (.)");
+                    Console.WriteLine("DEBUG: " + e.Message);
+                    Console.ReadLine();
+                    Console.Clear();
+                }
+            }
+
+            return Directorio_OUT;
+        }
+
+        /// <summary>
         ///  Parte del menú de comando que interroga el directorio de salida, retorna null si experimenta algun error.
         /// </summary>
         /// <param name="Directorio_OUT"></param>
@@ -917,9 +1285,10 @@ namespace Berta
                 try
                 {
                     (FileStream H, string Nombre) = Operaciones.AbrirKMLdeKMZ(path_SACTA);
-                    List<Geometry> Poligonos = Operaciones.TraducirPoligono(H, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
+                    List<Geometry> Poligonos = Operaciones.TraducirPoligono(H, Nombre, args, CvsM, Nombre); //Carga kml, extrae en SharpKML y traduce a NTS
                     Filtro_SACTA = new Cobertura("Filtro", "FL999", "original", Poligonos); //Cobertura donde guardaremos el filtro SACTA seleccionado
-                    Correcto = true;
+                    if(Poligonos[0].IsEmpty==false) //Controlar error en traducción
+                        Correcto = true;
                 }
                 catch (Exception e)
                 {
@@ -1075,6 +1444,11 @@ namespace Berta
                 Console.WriteLine("Fichero Output_COMMAND.txt no encontrado");
             }
             
+        }
+
+        public static List<Conjunto> CargarCoberturas_CoberturaMinima(string[] args, int CvsM)
+        {
+            return null;
         }
     }
 }

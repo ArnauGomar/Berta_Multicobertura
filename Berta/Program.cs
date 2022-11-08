@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text.RegularExpressions;
 using ICSharpCode.SharpZipLib.Zip;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Operation.Union;
@@ -145,7 +146,7 @@ namespace Berta
                             FL_IN = Operaciones.Menu_FL();
 
                             //1.2 - Entrada
-                            (DI, Directorio_IN) = Operaciones.Menu_DirectorioIN(FL_IN);
+                            (DI, Directorio_IN) = Operaciones.Menu_DirectorioIN(FL_IN,1);
 
                             //1.2.2 Entrada umbral de filtro (1NM de forma predeterminada)
                             Umbral_Areas = Operaciones.Menu_Umbral(Trans);
@@ -187,136 +188,146 @@ namespace Berta
                             {
                                 //Cargar coberturas originales 
                                 List<Cobertura> Originales = new List<Cobertura>();
-                                (Originales, NombresCargados) = Operaciones.CargarCoberturas(DI, FL_IN);
+                                (Originales, NombresCargados) = Operaciones.CargarCoberturas(DI, FL_IN, args, CvsM);
 
-                                //1.4 - Cálculos
-                                //Originales (crear carpeta)
-                                Conjunto conjunto = new Conjunto(Originales, "original", FL_IN);
-
-                                //Flitrar permutaciones 
-                                Console.WriteLine();
-                                Console.WriteLine("Inicio del cálculo...");
-                                Stopwatch stopwatch = Stopwatch.StartNew(); //Reloj para conocer el tiempo de ejecución
-                                                                            //conjunto.GenerarListasIntersecciones();
-                                conjunto.FiltrarCombinaciones(); //Eliminamos las combinaciones que no van a generar una intersección
-                                                                    //conjunto.FiltrarCombinaciones_Experimental();
-                                stopwatch.Stop();
-
-                                Console.WriteLine();
-                                Console.WriteLine("Tiempo de ejecución primera parte: " + new TimeSpan(stopwatch.ElapsedTicks).TotalSeconds + " segundos");
-
-                                //Mostrar en consola un tiempo estimado de cálculo
-                                double NumMuestras = conjunto.Combinaciones.Count();
-                                double MuestraSegundo = 163.371; //Valor empirico
-                                double tiempo = (NumMuestras / MuestraSegundo) / 60;
-                                double segundos = Math.Round(((Math.Round(tiempo, 2) - Math.Round(tiempo, 0)) * 60) + 25, 0);
-                                if (segundos < 0)
-                                    segundos = 0;
-                                Console.WriteLine("Se espera que el programa termine en unos " + Math.Round(tiempo, 0) + " minutos " + segundos + " segundos (" + DateTime.Now.ToString() + ")");
-                                Console.WriteLine();
-                                Console.WriteLine("Calculando...");
-
-                                stopwatch = Stopwatch.StartNew(); //Iniciamos el cronometro otra vez
-                                var folder_BASE = new SharpKml.Dom.Folder { Id = "Coberturas-Base", Name = "Coberturas Base " + FL_IN, }; //Creamos carpeta donde guardaremos todos los documentos relacionados
-                                folder_BASE.Visibility = false; //Iniciado de forma no visibile (no tick en google earth)
-
-                                foreach (Cobertura COB in conjunto.A_Operar)
+                                if(Originales!=null) //Controlar excepción asociada al cargado de cobertura
                                 {
-                                    folder_BASE.AddFeature(COB.CrearDocumentoSharpKML());
-                                }
+                                    //1.4 - Cálculos
+                                    //Originales (crear carpeta)
+                                    Conjunto conjunto = new Conjunto(Originales, "original", FL_IN);
 
-                                Folders.Add(folder_BASE);
+                                    //Flitrar permutaciones 
+                                    Console.WriteLine();
+                                    Console.WriteLine("Inicio del cálculo...");
+                                    Stopwatch stopwatch = Stopwatch.StartNew(); //Reloj para conocer el tiempo de ejecución
+                                                                                //conjunto.GenerarListasIntersecciones();
+                                    conjunto.FiltrarCombinaciones(); //Eliminamos las combinaciones que no van a generar una intersección
+                                                                     //conjunto.FiltrarCombinaciones_Experimental();
+                                    stopwatch.Stop();
 
-                                //Cobertura total (Documento)
-                                Cobertura CoberturaTotal = conjunto.FormarCoberturaTotal();
-                                KML_Cobertura_total = CoberturaTotal.CrearDocumentoSharpKML(); //Documento KML de la cobertura total
+                                    Console.WriteLine();
+                                    Console.WriteLine("Tiempo de ejecución primera parte: " + new TimeSpan(stopwatch.ElapsedTicks).TotalSeconds + " segundos");
 
-                                //Coberturas multiples y multiples total
-                                (List<Conjunto> Listado_ConjuntoCoberturasMultiples, Conjunto Anillos, Cobertura CoberturaMaxima) = conjunto.FormarCoberturasMultiples(epsilon, Umbral_Areas); //Cálculo coberturas múltiples
+                                    //Mostrar en consola un tiempo estimado de cálculo
+                                    double NumMuestras = conjunto.Combinaciones.Count();
+                                    double MuestraSegundo = 163.371; //Valor empirico
+                                    double tiempo = (NumMuestras / MuestraSegundo) / 60;
+                                    double segundos = Math.Round(((Math.Round(tiempo, 2) - Math.Round(tiempo, 0)) * 60) + 25, 0);
+                                    if (segundos < 0)
+                                        segundos = 0;
+                                    Console.WriteLine("Se espera que el programa termine en unos " + Math.Round(tiempo, 0) + " minutos " + segundos + " segundos (" + DateTime.Now.ToString() + ")");
+                                    Console.WriteLine();
+                                    Console.WriteLine("Calculando...");
 
-                                //Coberturas simples
-                                (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Anillos, CoberturaMaxima, epsilon_simple, Umbral_Areas); //Cálculo coberturas simples
+                                    stopwatch = Stopwatch.StartNew(); //Iniciamos el cronometro otra vez
+                                    var folder_BASE = new SharpKml.Dom.Folder { Id = "Coberturas-Base", Name = "Coberturas Base " + FL_IN, }; //Creamos carpeta donde guardaremos todos los documentos relacionados
+                                    folder_BASE.Visibility = false; //Iniciado de forma no visibile (no tick en google earth)
 
-                                //FILTRAR AQUI ANILLOS (EVITAR ERRORES EN COBERTURA SIMPLE, POLIGONOS NO VÁLIDOS)
-                                if (Anillos != null)
-                                {
-                                    foreach (Cobertura anillo in Anillos.A_Operar)
+                                    foreach (Cobertura COB in conjunto.A_Operar)
                                     {
-                                        List<Polygon> Verificados = new List<Polygon>(); //Lista de verificación de poligonos
-                                        var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //Factoria para crear multipoligonos
-                                        if (anillo.Area_Operaciones.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
-                                        {
-                                            foreach (Polygon TrozoAnillo in (MultiPolygon)anillo.Area_Operaciones)
-                                            {
-                                                if (TrozoAnillo.Area >= Umbral_Areas)
-                                                    Verificados.Add(TrozoAnillo);
-                                            }
-                                            anillo.ActualizarAreas(gff.CreateMultiPolygon(Verificados.ToArray()));
-                                        }
+                                        folder_BASE.AddFeature(COB.CrearDocumentoSharpKML());
                                     }
-                                }
 
+                                    Folders.Add(folder_BASE);
 
-                                //Añadir coberturas simples (crear carpeta)
-                                var folder_Simples = new SharpKml.Dom.Folder();
-                                folder_Simples.Visibility = false;
-                                folder_Simples.Name = "Multi-Cobertura " + string.Format("{0:00}", 1) + " " + FL_IN;
-                                folder_Simples.Id = "Multi-Cobertura-" + string.Format("{0:00}", 1);
-                                folder_Simples.AddFeature(CoberturaSimpleTotal.CrearDocumentoSharpKML());
-                                foreach (Cobertura COB in CoberturasSimples.A_Operar)
-                                {
-                                    folder_Simples.AddFeature(COB.CrearDocumentoSharpKML());
-                                }
-                                Folders.Add(folder_Simples);
+                                    //Cobertura total (Documento)
+                                    Cobertura CoberturaTotal = conjunto.FormarCoberturaTotal();
+                                    KML_Cobertura_total = CoberturaTotal.CrearDocumentoSharpKML(); //Documento KML de la cobertura total
 
-                                //Añadimos coberturas múltiples y anillos (crear carpeta)
-                                foreach (Conjunto con in Listado_ConjuntoCoberturasMultiples)
-                                {
-                                    int Lvl = Convert.ToInt32(con.Identificador.Split(" ")[1]);
-                                    var folder_lvl = new SharpKml.Dom.Folder();
-                                    folder_lvl.Visibility = false;
-                                    folder_lvl.Name = "Multi-Cobertura " + string.Format("{0:00}", Lvl) + " " + FL_IN;
-                                    folder_lvl.Id = "Multi-Cobertura-" + string.Format("{0:00}", Lvl);
+                                    //Coberturas multiples y multiples total
+                                    (List<Conjunto> Listado_ConjuntoCoberturasMultiples, Conjunto Anillos, Cobertura CoberturaMaxima) = conjunto.FormarCoberturasMultiples(epsilon, Umbral_Areas); //Cálculo coberturas múltiples
 
-                                    //Buscar anillo correspondiente al lvl 
+                                    //Coberturas simples
+                                    (Conjunto CoberturasSimples, Cobertura CoberturaMultipleTotal, Cobertura CoberturaSimpleTotal) = conjunto.FormarCoberturasSimples(Anillos, CoberturaMaxima, epsilon_simple, Umbral_Areas); //Cálculo coberturas simples
+
+                                    //FILTRAR AQUI ANILLOS (EVITAR ERRORES EN COBERTURA SIMPLE, POLIGONOS NO VÁLIDOS)
                                     if (Anillos != null)
                                     {
-                                        var anillo = Anillos.A_Operar.Where(x => x.tipo_multiple == Lvl).ToList()[0];
-                                        folder_lvl.AddFeature(anillo.CrearDocumentoSharpKML());
+                                        foreach (Cobertura anillo in Anillos.A_Operar)
+                                        {
+                                            List<Polygon> Verificados = new List<Polygon>(); //Lista de verificación de poligonos
+                                            var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //Factoria para crear multipoligonos
+                                            if (anillo.Area_Operaciones.GetType().ToString() == "NetTopologySuite.Geometries.MultiPolygon")
+                                            {
+                                                foreach (Polygon TrozoAnillo in (MultiPolygon)anillo.Area_Operaciones)
+                                                {
+                                                    if (TrozoAnillo.Area >= Umbral_Areas)
+                                                        Verificados.Add(TrozoAnillo);
+                                                }
+                                                anillo.ActualizarAreas(gff.CreateMultiPolygon(Verificados.ToArray()));
+                                            }
+                                        }
                                     }
 
-                                    //Añadir multicoberturas
-                                    foreach (Cobertura cob in con.A_Operar)
-                                        folder_lvl.AddFeature(cob.CrearDocumentoSharpKML());
 
-                                    Folders.Add(folder_lvl);
+                                    //Añadir coberturas simples (crear carpeta)
+                                    var folder_Simples = new SharpKml.Dom.Folder();
+                                    folder_Simples.Visibility = false;
+                                    folder_Simples.Name = "Multi-Cobertura " + string.Format("{0:00}", 1) + " " + FL_IN;
+                                    folder_Simples.Id = "Multi-Cobertura-" + string.Format("{0:00}", 1);
+                                    folder_Simples.AddFeature(CoberturaSimpleTotal.CrearDocumentoSharpKML());
+                                    foreach (Cobertura COB in CoberturasSimples.A_Operar)
+                                    {
+                                        folder_Simples.AddFeature(COB.CrearDocumentoSharpKML());
+                                    }
+                                    Folders.Add(folder_Simples);
+
+                                    //Añadimos coberturas múltiples y anillos (crear carpeta)
+                                    foreach (Conjunto con in Listado_ConjuntoCoberturasMultiples)
+                                    {
+                                        int Lvl = Convert.ToInt32(con.Identificador.Split(" ")[1]);
+                                        var folder_lvl = new SharpKml.Dom.Folder();
+                                        folder_lvl.Visibility = false;
+                                        folder_lvl.Name = "Multi-Cobertura " + string.Format("{0:00}", Lvl) + " " + FL_IN;
+                                        folder_lvl.Id = "Multi-Cobertura-" + string.Format("{0:00}", Lvl);
+
+                                        //Buscar anillo correspondiente al lvl 
+                                        if (Anillos != null)
+                                        {
+                                            var anillo = Anillos.A_Operar.Where(x => x.tipo_multiple == Lvl).ToList()[0];
+                                            folder_lvl.AddFeature(anillo.CrearDocumentoSharpKML());
+                                        }
+
+                                        //Añadir multicoberturas
+                                        foreach (Cobertura cob in con.A_Operar)
+                                            folder_lvl.AddFeature(cob.CrearDocumentoSharpKML());
+
+                                        Folders.Add(folder_lvl);
+                                    }
+
+                                    //Añadimos cobertura máxima si es que existe (crear carpeta)
+                                    if (CoberturaMaxima != null)
+                                    {
+                                        var folder_MAX = new SharpKml.Dom.Folder();
+                                        folder_MAX.Visibility = false;
+                                        int Lvl = CoberturaMaxima.tipo_multiple;
+                                        folder_MAX.Name = "Multi-Cobertura " + string.Format("{0:00}", Lvl) + " " + FL_IN;
+                                        folder_MAX.Id = "Multi-Cobertura-" + string.Format("{0:00}", Lvl);
+                                        folder_MAX.AddFeature(CoberturaMaxima.CrearDocumentoSharpKML());
+
+                                        Folders.Add(folder_MAX);
+                                    }
+
+                                    if (NombresCargados.Count < 10)
+                                        NombrePredeterminado = String.Join('.', NombresCargados);
+                                    else
+                                        NombrePredeterminado = NombresCargados[0] + "." + NombresCargados.Last() + " (entre otros)";
+
+                                    //Redundados
+                                    Redundados = Operaciones.CarpetaRedundados(conjunto, CoberturasSimples, Listado_ConjuntoCoberturasMultiples, CoberturaMaxima);
+
+                                    stopwatch.Stop();
+                                    TiempoEjecución_Parte2 = new TimeSpan(stopwatch.ElapsedTicks);
+                                    parte1 = true;
+                                    //Fin de la parte1
                                 }
-
-                                //Añadimos cobertura máxima si es que existe (crear carpeta)
-                                if (CoberturaMaxima != null)
+                                else if(CvsM == 0)
                                 {
-                                    var folder_MAX = new SharpKml.Dom.Folder();
-                                    folder_MAX.Visibility = false;
-                                    int Lvl = CoberturaMaxima.tipo_multiple;
-                                    folder_MAX.Name = "Multi-Cobertura " + string.Format("{0:00}", Lvl) + " " + FL_IN;
-                                    folder_MAX.Id = "Multi-Cobertura-" + string.Format("{0:00}", Lvl);
-                                    folder_MAX.AddFeature(CoberturaMaxima.CrearDocumentoSharpKML());
-
-                                    Folders.Add(folder_MAX);
+                                    Console.WriteLine("No se ha completado el cálculo");
+                                    Console.ReadLine();
                                 }
 
-                                if (NombresCargados.Count < 10)
-                                    NombrePredeterminado = String.Join('.', NombresCargados);
-                                else
-                                    NombrePredeterminado = NombresCargados[0] + "." + NombresCargados.Last() + " (entre otros)";
-
-                                //Redundados
-                                Redundados = Operaciones.CarpetaRedundados(conjunto, CoberturasSimples, Listado_ConjuntoCoberturasMultiples, CoberturaMaxima);
-
-                                stopwatch.Stop();
-                                TiempoEjecución_Parte2 = new TimeSpan(stopwatch.ElapsedTicks);
-                                parte1 = true;
-                                //Fin de la parte1
+                                
                             }
                             else
                             {
@@ -515,39 +526,114 @@ namespace Berta
                                 List<string> NombresCargados = new List<string>();
 
                                 //Cargar todos los archivos de la carpeta
-                                (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null);
+                                (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null, args,CvsM);
 
-                                //Actualizar nombres en coberturas (FL)
-                                int i = 0;
-                                foreach (Cobertura cob in Coberturas)
+                                if(Coberturas != null) //Controlar excepción error de traducción
                                 {
-                                    try
-                                    {
-                                        cob.FL = NombresCargados[i].Split('-')[1];
-                                    }
-                                    catch
+                                    //Actualizar nombres en coberturas (FL)
+                                    int i = 0;
+                                    foreach (Cobertura cob in Coberturas)
                                     {
                                         try
                                         {
-                                            cob.FL = NombresCargados[i].Split('_').Last();
+                                            cob.FL = NombresCargados[i].Split('-')[1];
                                         }
                                         catch
                                         {
-                                            Console.WriteLine("Error en formato de entrada de los archivos, el separador del FL debería ser '-' o '_' (NOMBRE-FLXXX o NOMBRE_FLXXX)");
-                                            Console.WriteLine("Error en: " + NombresCargados[i]);
+                                            try
+                                            {
+                                                cob.FL = NombresCargados[i].Split('_').Last();
+                                            }
+                                            catch
+                                            {
+                                                Console.WriteLine("Error en formato de entrada de los archivos, el separador del FL debería ser '-' o '_' (NOMBRE-FLXXX o NOMBRE_FLXXX)");
+                                                Console.WriteLine("Error en: " + NombresCargados[i]);
+                                                Console.WriteLine();
+                                                Console.WriteLine("Enter para continuar");
+                                                Console.ReadLine();
+                                            }
+                                        }
+                                        i++;
+                                    }
+
+                                    if (Directorio_Cobertura.GetFiles().Count() >= 1) //Minimo un archivo
+                                    {
+                                        bool Control_DC = false; //Bucle para cargar
+                                        while (Control_DC == false)
+                                        {
+                                            Console.Clear();
+                                            Console.WriteLine("Berta T");
                                             Console.WriteLine();
-                                            Console.WriteLine("Enter para continuar");
-                                            Console.ReadLine();
+                                            Console.WriteLine("2 - Filtrado SACTA");
+                                            Console.WriteLine();
+                                            Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
+                                            Console.WriteLine();
+                                            Console.WriteLine();
+                                            Console.WriteLine("Archivos en carpeta:");
+                                            Console.WriteLine();
+                                            i = 1;
+                                            foreach (var file in Directorio_Cobertura.GetFiles())
+                                            {
+                                                Console.WriteLine("" + i + " - " + file.Name);
+                                                i++;
+                                            }
+                                            Console.WriteLine();
+                                            Console.WriteLine("¿Desea ejecutar el filtrado en todos los kmz dentro de la carpeta? (0 para si)");
+                                            Console.WriteLine("Si solo desea ejecutar el fitrado sobre un solo kmz introduzca el identificador");
+                                            Console.WriteLine("-1 para cambiar de directorio");
+                                            int Control_DC_n = 0;
+                                            if (CvsM == 0)
+                                                Control_DC_n = Convert.ToInt32(Console.ReadLine());
+
+                                            if (Control_DC_n == 0) //Ejecutar toda la carpeta, si estamos en visualización de comando también se ejecuta toda la carpeta
+                                            {
+                                                Control_DC = true; //terminamos bucle
+                                            }
+                                            else if (Control_DC_n == -1) //Cambiamos el directorio
+                                            {
+                                                Console.WriteLine();
+                                                Console.WriteLine("Directorio de cobertura a filtrar:");
+                                                //path_Cob = Console.ReadLine();
+                                                //Directorio_Cobertura = new DirectoryInfo(path_Cob);
+                                                (Directorio_Cobertura, path_Cob) = Operaciones.Menu_DirectorioIN_SACTA();
+                                                (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null, args, CvsM); //Cargamos coberturas de los archivos de esa carpeta
+                                                                                                                                                      //Seguimos con el bucle
+                                            }
+                                            else if (Control_DC_n - 1 <= Directorio_Cobertura.GetFiles().Count())//Archivo en concreto Si el Control_DC_n es un archivo válido
+                                            {
+                                                Control_DC = true; //terminamos bucle
+                                                                   //Extraemos info de indice seleccionado
+                                                List<Cobertura> Seleccionada = new List<Cobertura>();
+                                                Seleccionada.Add(Coberturas[Control_DC_n - 1]);
+                                                Coberturas = Seleccionada;
+                                                List<string> Seleccionado = new List<string>();
+                                                Seleccionado.Add(NombresCargados[Control_DC_n - 1]);
+                                                NombresCargados = Seleccionado;
+                                            }
+                                            else //Identificador no válido
+                                            {
+                                                Console.WriteLine();
+                                                Console.WriteLine("Identificador no válido");
+                                                Console.WriteLine("Enter para continuar");
+                                                Console.ReadLine();
+                                                //Seguimos el bucle
+                                            }
                                         }
                                     }
-                                    i++;
-                                }
 
-                                if (Directorio_Cobertura.GetFiles().Count() >= 1) //Minimo un archivo
-                                {
-                                    bool Control_DC = false; //Bucle para cargar
-                                    while (Control_DC == false)
+                                    Conjunto conjuntoAfiltrar = new Conjunto(Coberturas, "original", "FL999");
+
+                                    Cobertura Filtro_SACTA = null; string path_SACTA = null;
+
+                                    //Cargar filtro SACTA
+                                    (Filtro_SACTA, path_SACTA) = Operaciones.Menu_DirectorioSACTA_SACTA(NombresCargados, path_Cob, CvsM, args);
+
+                                    if (Filtro_SACTA != null)
                                     {
+                                        //Ejecutar filtrado
+                                        Conjunto Filtrado = conjuntoAfiltrar.Aplicar_SACTA(Filtro_SACTA);
+
+                                        //Obtener directorio de salida
                                         Console.Clear();
                                         Console.WriteLine("Berta T");
                                         Console.WriteLine();
@@ -555,99 +641,32 @@ namespace Berta
                                         Console.WriteLine();
                                         Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
                                         Console.WriteLine();
-                                        Console.WriteLine();
-                                        Console.WriteLine("Archivos en carpeta:");
-                                        Console.WriteLine();
-                                        i = 1;
-                                        foreach (var file in Directorio_Cobertura.GetFiles())
-                                        {
-                                            Console.WriteLine("" + i + " - " + file.Name);
-                                            i++;
-                                        }
-                                        Console.WriteLine();
-                                        Console.WriteLine("¿Desea ejecutar el filtrado en todos los kmz dentro de la carpeta? (0 para si)");
-                                        Console.WriteLine("Si solo desea ejecutar el fitrado sobre un solo kmz introduzca el identificador");
-                                        Console.WriteLine("-1 para cambiar de directorio");
-                                        int Control_DC_n = 0;
-                                        if (CvsM == 0)
-                                            Control_DC_n = Convert.ToInt32(Console.ReadLine());
+                                        Console.WriteLine("Directorio completo del kmz de filtros SACTA: " + path_SACTA);
 
-                                        if (Control_DC_n == 0) //Ejecutar toda la carpeta, si estamos en visualización de comando también se ejecuta toda la carpeta
+                                        int C = Operaciones.Menu_DirectorioOUT_SACTA(path_Cob, path_SACTA, Filtrado, CvsM, args);
+                                        if (C == 0)
                                         {
-                                            Control_DC = true; //terminamos bucle
-                                        }
-                                        else if (Control_DC_n == -1) //Cambiamos el directorio
-                                        {
-                                            Console.WriteLine();
-                                            Console.WriteLine("Directorio de cobertura a filtrar:");
-                                            //path_Cob = Console.ReadLine();
-                                            //Directorio_Cobertura = new DirectoryInfo(path_Cob);
-                                            (Directorio_Cobertura, path_Cob) = Operaciones.Menu_DirectorioIN_SACTA();
-                                            (Coberturas, NombresCargados) = Operaciones.CargarCoberturas(Directorio_Cobertura, null); //Cargamos coberturas de los archivos de esa carpeta
-                                                                                                                                      //Seguimos con el bucle
-                                        }
-                                        else if (Control_DC_n - 1 <= Directorio_Cobertura.GetFiles().Count())//Archivo en concreto Si el Control_DC_n es un archivo válido
-                                        {
-                                            Control_DC = true; //terminamos bucle
-                                                               //Extraemos info de indice seleccionado
-                                            List<Cobertura> Seleccionada = new List<Cobertura>();
-                                            Seleccionada.Add(Coberturas[Control_DC_n - 1]);
-                                            Coberturas = Seleccionada;
-                                            List<string> Seleccionado = new List<string>();
-                                            Seleccionado.Add(NombresCargados[Control_DC_n - 1]);
-                                            NombresCargados = Seleccionado;
-                                        }
-                                        else //Identificador no válido
-                                        {
-                                            Console.WriteLine();
-                                            Console.WriteLine("Identificador no válido");
-                                            Console.WriteLine("Enter para continuar");
-                                            Console.ReadLine();
-                                            //Seguimos el bucle
+                                            Console.WriteLine("Exportado con exito!");
+
+                                            if (CvsM == 0)
+                                            {
+                                                Console.WriteLine("Enter para continuar");
+                                                Console.ReadLine();
+                                            }
+                                            else
+                                            {
+                                                Operaciones.EscribirOutput(args, "CORRECTO");
+                                                System.Threading.Thread.Sleep(2000);
+                                            }
                                         }
                                     }
+
                                 }
-
-                                Conjunto conjuntoAfiltrar = new Conjunto(Coberturas, "original", "FL999");
-
-                                Cobertura Filtro_SACTA = null; string path_SACTA = null;
-
-                                //Cargar filtro SACTA
-                                (Filtro_SACTA, path_SACTA) = Operaciones.Menu_DirectorioSACTA_SACTA(NombresCargados, path_Cob, CvsM, args);
-
-                                if (Filtro_SACTA != null)
+                                else if(CvsM ==0)
                                 {
-                                    //Ejecutar filtrado
-                                    Conjunto Filtrado = conjuntoAfiltrar.Aplicar_SACTA(Filtro_SACTA);
-
-                                    //Obtener directorio de salida
-                                    Console.Clear();
-                                    Console.WriteLine("Berta T");
-                                    Console.WriteLine();
-                                    Console.WriteLine("2 - Filtrado SACTA");
-                                    Console.WriteLine();
-                                    Console.WriteLine("Directorio de cobertura a filtrar: " + path_Cob);
-                                    Console.WriteLine();
-                                    Console.WriteLine("Directorio completo del kmz de filtros SACTA: " + path_SACTA);
-
-                                    int C =Operaciones.Menu_DirectorioOUT_SACTA(path_Cob, path_SACTA, Filtrado, CvsM, args);
-                                    if(C==0)
-                                    {
-                                        Console.WriteLine("Exportado con exito!");
-
-                                        if (CvsM == 0)
-                                        {
-                                            Console.WriteLine("Enter para continuar");
-                                            Console.ReadLine();
-                                        }
-                                        else
-                                        {
-                                            Operaciones.EscribirOutput(args, "CORRECTO");
-                                            System.Threading.Thread.Sleep(2000);
-                                        }
-                                    }
+                                    Console.WriteLine("No se ha completado el cálculo");
+                                    Console.ReadLine();
                                 }
-
                             }
                         }
                         else 
@@ -661,35 +680,216 @@ namespace Berta
                         
 
                     } //Filtrado SACTA
-                    else if (Control_M == 3)
+                    else if (Control_M == 3) //Cobertura mínima
                     {
-                        string NombrePredeterminado = "Cobertura Mínima"; //String para guardar un nombre de proyecto predeterminado
-                        string Directorio_IN = ""; //Directorio de entrada
-                        List<string> NombresCargados = new List<string>(); //Lista donde se guardan los nombres de los archivos cargados.
+                        //Operaciones.CargarCoberturas_CoberturaMinima(args, CvsM);
+
+                        //List<Conjunto> CoberturasPorFL = new List<Conjunto>(); //Return, conjunto de cada FL para así ejecutar las agrupaciones de forma simple
+                        var gff = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(); //Factoria para crear todos los multipoligonos o poligonos del codigo
+                        List<Conjunto> AnillosFL = new List<Conjunto>();
+
+                        SharpKml.Dom.Folder KML_Anillos = new SharpKml.Dom.Folder(); //Donde se guardarán la distirbución por anillos de FL
+                        SharpKml.Dom.Folder KML_Radares = new SharpKml.Dom.Folder(); //Donde se guardarán la distirbución por radares
+ 
                         DirectoryInfo DI = null;
+                        string directorio = null;
+                        if (CvsM == 0) //modo menú
+                            (DI, directorio) = Operaciones.Menu_DirectorioIN("FL999", 3);
+                        else //modo comando
+                            (DI, directorio) = Operaciones.Comando_DirectorioIN(args);
 
-                        if (CvsM == 0)
+                        if (DI != null)
                         {
-                            (DI, Directorio_IN) = Operaciones.Menu_DirectorioIN("FL999");
-                        }
-                        else if(args.Count()==3)
-                        {
-                            (DI, Directorio_IN) = Operaciones.Comando_DirectorioIN(args);
-                        }
-
-                        if(Directorio_IN!=null)
-                        {
-                            if (DI.GetFiles().Count() > 1) //Si hay mas de 1 archivo dentro de la carpeta se ejecuta el programa
+                            //Ahora ya tenemos directorio DI con carpetas, abrimos cada una de las carpetas y guardamos las coberturas
+                            List<Cobertura> ListadoCobrturasPorCarpeta = new List<Cobertura>(); //Lista donde guardar TODAS las coberturas.
+                            List<string> Nombres_Radar = new List<string>(); //Para crear las carpetas en mostrado por radar
+                            if(DI.GetDirectories().Count()!=0)
                             {
-                                //Cargar coberturas originales 
-                                List<Cobertura> Originales = new List<Cobertura>();
-                                (Originales, NombresCargados) = Operaciones.CargarCoberturas(DI, "FL999");
-                                Conjunto conjunto = new Conjunto(Originales, "CoberturaMinima", "FL999");
-                                conjunto.ActualizarFL(NombresCargados);
-                                conjunto.CalcularCoberturaMinima();
+                                foreach (DirectoryInfo carpeta in DI.GetDirectories())
+                                {
+                                    (List<Cobertura> L, List<string> n) = Operaciones.CargarCoberturas(carpeta, null, args, CvsM);
+                                    if (L != null)
+                                    {
+                                        ListadoCobrturasPorCarpeta.AddRange(L);
+                                        Nombres_Radar.AddRange(n);
+                                    }
+                                    else
+                                    {
+                                        DI = null;
+                                        break;
+                                    }
+                                }
                             }
-                        }
-                        
+                            else
+                            {
+                                (ListadoCobrturasPorCarpeta, Nombres_Radar) = Operaciones.CargarCoberturas(DI, null, args, CvsM);
+                                //ListadoCobrturasPorCarpeta = L;
+                            }
+
+
+                            //Una vez cargadas todas las coberturas, agrupamos por FL. 
+                            ListadoCobrturasPorCarpeta.OrderBy(x => x.FL);
+                            int FL = Convert.ToInt32(Regex.Match(ListadoCobrturasPorCarpeta[0].FL, "(\\d+)").Value); int skips = 0;
+                            int FL_ini = FL;
+                            int interval = Convert.ToInt32(Regex.Match(ListadoCobrturasPorCarpeta[2].FL, "(\\d+)").Value) - Convert.ToInt32(Regex.Match(ListadoCobrturasPorCarpeta[1].FL, "(\\d+)").Value);
+                            Geometry Trama = null; //Coberturas que serán restadas al nivel superior
+                            int FL_MAX = Convert.ToInt32(Regex.Match(ListadoCobrturasPorCarpeta.Last().FL, "(\\d+)").Value);
+                            while ((FL <= FL_MAX) && (ListadoCobrturasPorCarpeta.Count > 0)) //Minetras no lleguemos a FL260 ni la lista de coberturas se quede vacía
+                            {
+                                SharpKml.Dom.Folder KML = new SharpKml.Dom.Folder();
+
+                                //Obtener el FL como FLXXX
+                                string FLXXX = "";
+                                if (FL < 10)
+                                    FLXXX = "FL00" + FL;
+                                else if (FL < 100)
+                                    FLXXX = "FL0" + FL;
+                                else
+                                    FLXXX = "FL" + FL;
+                                //FLXXX = "FL010";
+                                List<Cobertura> Seleccionadas = ListadoCobrturasPorCarpeta.Where(x => x.FL == FLXXX).ToList();
+                                ListadoCobrturasPorCarpeta.RemoveAll(x => x.FL == FLXXX); //Eliminamos elementos con FLXXX
+
+                                if(Seleccionadas.Count!=0) //Solo si existen coberturas se ejecuta el proceso.
+                                {
+                                    Conjunto Conjunto_Seleccionado = new Conjunto(Seleccionadas, "", FLXXX);
+
+                                    Conjunto_Seleccionado.FiltrarCombinaciones();
+                                    (List<Conjunto> ConjuntosPorLvl_F, Conjunto Anillos, Cobertura CoberturaMaxima) = Conjunto_Seleccionado.FormarCoberturasMultiples(epsilon, Umbral_Areas); //Calculamos multicobertura
+                                    (Conjunto Resultado_Seleccionados, Cobertura NoUsado1, Cobertura NoUsado2)=Conjunto_Seleccionado.FormarCoberturasSimples(Anillos, CoberturaMaxima, epsilon_simple, Umbral_Areas);
+
+                                    //Conjunto NuevaFinal = new Conjunto();
+
+                                    foreach (Conjunto con in ConjuntosPorLvl_F)
+                                    {
+                                        Resultado_Seleccionados.A_Operar.AddRange(con.A_Operar);
+                                    }
+
+                                    Resultado_Seleccionados.FL = FLXXX;
+                                    Resultado_Seleccionados.Identificador = "ColorEscala";
+
+                                    if (Trama == null)
+                                    {
+                                        //Trama = Operaciones.ReducirPrecision(CoberturaTrama);
+                                        Trama = Operaciones.ReducirPrecision(Conjunto_Seleccionado.FormarCoberturaTotal().Area_Operaciones);
+                                    }
+                                    else
+                                    {
+                                        foreach (Cobertura cob in Resultado_Seleccionados.A_Operar)
+                                        {
+                                            var Cob_Area = Operaciones.ReducirPrecision(cob.Area_Operaciones, 1000);
+                                            var NewGeo = Operaciones.ReducirPrecision(Cob_Area.Difference(Trama), 1000);
+
+                                            //Sección de código para eliminar geometrias sospechosas, vacías
+                                            if (NewGeo.Area < epsilon) //Eliminar geometrias sospechosas
+                                            {
+                                                NewGeo = gff.CreateEmpty(Dimension.Curve);
+                                            }
+                                            else if (NewGeo.GetType().ToString() != "NetTopologySuite.Geometries.Polygon")
+                                            {
+                                                MultiPolygon Verificar = (MultiPolygon)NewGeo;
+                                                var Poligonos = Verificar.Geometries;
+                                                List<Polygon> Verificados = new List<Polygon>();
+                                                foreach (Polygon Poly in Poligonos)
+                                                {
+                                                    if (Poly.Area > epsilon)
+                                                    {
+                                                        Verificados.Add(Poly);
+                                                    }
+                                                }
+                                                Verificados.RemoveAll(x => x.IsEmpty == true);
+
+                                                NewGeo = gff.CreateMultiPolygon(Verificados.ToArray());
+                                            }
+
+                                            cob.ActualizarAreas(NewGeo); //Actualizar
+                                        }
+                                        Trama = Trama.Union(Operaciones.ReducirPrecision(Conjunto_Seleccionado.FormarCoberturaTotal().Area_Operaciones, 100000));
+                                        Resultado_Seleccionados.A_Operar.RemoveAll(x => x.Area_Operaciones.IsEmpty == true);//Eliminamos coberturas vacias
+                                    }
+
+                                    AnillosFL.Add(Resultado_Seleccionados);
+
+                                    //SharpKml.Dom.Document KML_D = new SharpKml.Dom.Document(); //TESTING
+
+                                    foreach (Cobertura cob in Resultado_Seleccionados.A_Operar)
+                                    {
+                                        KML.AddFeature(cob.CrearDocumentoSharpKML());
+                                        //KML_D.AddFeature(cob.CrearDocumentoSharpKML()); //TESTING
+                                    }
+
+                                    KML_Anillos.AddFeature(KML);
+
+                                    //Operaciones.CrearKML_KMZ(KML_D, FLXXX, "Temporal", @"Temporal"); //TESTING
+                                }
+
+                                Console.WriteLine(FL);
+                                FL=FL+interval;
+                            }
+
+                            KML_Radares = Operaciones.CarpetaRedundados_CM(Nombres_Radar, AnillosFL, FL_ini, FL_MAX, interval); //CARPETAS DE ESCENARIO POR RADAR!
+
+                            //FINAL 1 - DIRECTORIO SALIDA y NOMBRE PROYECTO
+
+                            string Directorio_salida = ""; //Directorio de salida
+                            string Nombre_Proyecto = "Cobertura mínima";
+                            if(CvsM == 0) //Modo menú
+                            {
+                                Console.WriteLine("Introduzca nombre del proyecto (si no introduce ninguno se creara uno por defecto):");
+                                Nombre_Proyecto = Console.ReadLine();
+                                if (Nombre_Proyecto == "") //Nombre por defecto
+                                {
+                                    Nombre_Proyecto = "Cobertura mínima";
+                                }
+
+                                Directorio_salida = Operaciones.Menu_DirectorioOUT();
+                            }
+                            else //Modo comando
+                            {
+                                if (args[4] == "-") //Nombre por defecto //REVISAR INDICE YA QUE ME LO HE INVENTADO
+                                {
+                                    Nombre_Proyecto = "Cobertura mínima";
+                                }
+                                else
+                                    Nombre_Proyecto = args[4]; //REVISAR INDICE YA QUE ME LO HE INVENTADO
+
+                                Directorio_salida = Operaciones.Comando_DirectorioOUT(args[2]); //REVISAR INDICE YA QUE ME LO HE INVENTADO
+                            }
+
+                            //FINAL 2 - CREAMOS DOCUMENTO KMZ
+
+                            Operaciones.CrearKML_KMZ(new List<SharpKml.Dom.Folder>() { KML_Anillos, KML_Radares }, Nombre_Proyecto, "Temporal", Directorio_salida);
+                        }//Cobertura mínima
+
+                        //string NombrePredeterminado = "Cobertura Mínima"; //String para guardar un nombre de proyecto predeterminado
+                        //string Directorio_IN = ""; //Directorio de entrada
+                        //List<string> NombresCargados = new List<string>(); //Lista donde se guardan los nombres de los archivos cargados.
+                        //DirectoryInfo DI = null;
+
+                        //if (CvsM == 0)
+                        //{
+                        //    (DI, Directorio_IN) = Operaciones.Menu_DirectorioIN("FL999");
+                        //}
+                        //else if (args.Count() == 3)
+                        //{
+                        //    (DI, Directorio_IN) = Operaciones.Comando_DirectorioIN(args);
+                        //}
+
+                        //if (Directorio_IN != null)
+                        //{
+                        //    if (DI.GetFiles().Count() > 1) //Si hay mas de 1 archivo dentro de la carpeta se ejecuta el programa
+                        //    {
+                        //        //Cargar coberturas originales
+                        //        List<Cobertura> Originales = new List<Cobertura>();
+                        //        (Originales, NombresCargados) = Operaciones.CargarCoberturas(DI, "FL999");
+                        //        Conjunto conjunto = new Conjunto(Originales, "CoberturaMinima", "FL999");
+                        //        conjunto.ActualizarFL(NombresCargados);
+                        //        conjunto.CalcularCoberturaMinima();
+                        //    }
+                        //}
+
+
+
                     }
                     else if (Control_M == 5)//Ajustes
                     {
@@ -706,6 +906,7 @@ namespace Berta
                                 Console.WriteLine("1 - Seleccionar comando/menú");
                                 Console.WriteLine("2 - Ajustar tolerancia de filtrado múltiple (evitar la desaparición de ciertas áreas pequeñas, PUEDEN APARECER RESULTADOS ERRÓNEOS)");
                                 Console.WriteLine("3 - Ajustar tolerancia de filtrado simple (evitar la desaparición de ciertas áreas pequeñas, PUEDEN APARECER RESULTADOS ERRÓNEOS)");
+                                Console.WriteLine("4 - Generador escenarios cobertura mínima");
                                 Console.WriteLine();
                                 Console.WriteLine("0 - Volver a menú principal");
                                 Console.WriteLine();
@@ -721,7 +922,7 @@ namespace Berta
                                     Console.WriteLine();
                                     Console.WriteLine("0 = Menú 1 = Comandos");
                                     int Resultado = Convert.ToInt32(Console.ReadLine());
-                                    if(Resultado<=1)
+                                    if (Resultado <= 1)
                                     {
                                         CvsM = Resultado;
                                         Operaciones.GuardarAjustes(CvsM, epsilon, epsilon_simple);
@@ -736,7 +937,7 @@ namespace Berta
                                     }
 
                                 }//cambiar de version comando/menu
-                                else if(Control_A == 2) //modificar tolerancia multiple
+                                else if (Control_A == 2) //modificar tolerancia multiple
                                 {
                                     try
                                     {
@@ -803,6 +1004,108 @@ namespace Berta
                                         Console.ReadLine();
                                     }
                                 }//modificar tolerancia simple
+                                else if (Control_A == 4) //Preparador de ejercicios de Cobertura Mínima
+                                {
+                                    DirectoryInfo DI = null;
+                                    string directorio = null;
+                                    int intervalo = 0;
+                                    string directorio_out = null;
+                                    string FL_init = "";
+                                    string FL_fin = "";
+
+                                    if (CvsM == 0) //modo menú
+                                    {
+                                        (DI, directorio) = Operaciones.Menu_DirectorioIN("FL999", 3);
+                                        Console.WriteLine("Introducir FL de inicio");
+                                        Console.ReadLine();
+                                        FL_init = Operaciones.Menu_FL();
+                                        Console.WriteLine("Introducir FL finalr");
+                                        Console.ReadLine();
+                                        FL_fin = Operaciones.Menu_FL();
+                                        Console.WriteLine("Introducir a continuación intervalo FL (FLXXX), enter para continuar");
+                                        Console.ReadLine();
+                                        string FL_Interval = Operaciones.Menu_FL();
+                                        Match m = Regex.Match(FL_Interval, "(\\d+)");
+                                        intervalo = Convert.ToInt32(m.Value);
+                                        while(directorio_out==null)
+                                        {
+                                            Console.WriteLine("Introducir directorio para guardar escenario");
+                                            directorio_out = Operaciones.Comando_DirectorioOUT(Console.ReadLine());
+                                        }
+                                        
+                                    }
+                                        
+                                    else //modo comando
+                                    {
+                                        (DI, directorio) = Operaciones.Comando_DirectorioIN(args);
+                                        string FL_Interval = Operaciones.Comando_FL(args);
+                                        Match m = Regex.Match(FL_Interval, "(\\d+)");
+                                        intervalo = Convert.ToInt32(string.Empty);
+                                        directorio_out = Operaciones.Comando_DirectorioOUT(Console.ReadLine());
+                                    }
+                                        
+                                    if (DI != null)
+                                    {
+                                        //Ahora ya tenemos directorio DI con carpetas, abrimos cada una de las carpetas y guardamos las coberturas
+                                        if (DI.GetDirectories().Count() != 0)
+                                        {
+                                            foreach (DirectoryInfo carpeta in DI.GetDirectories())
+                                            {
+                                                int FL = Convert.ToInt32(Regex.Match(FL_init, "(\\d+)").Value);
+                                                while(FL <= Convert.ToInt32(Regex.Match(FL_fin, "(\\d+)").Value))
+                                                {
+                                                    string FLXXX = "";
+                                                    if (FL < 10)
+                                                        FLXXX = "FL00" + FL;
+                                                    else if (FL < 100)
+                                                        FLXXX = "FL0" + FL;
+                                                    else
+                                                        FLXXX = "FL" + FL;
+                                                    try
+                                                    {
+                                                        //Seleccionamos archivo de cada intervalo
+                                                        FileInfo Cobertura_Escenario = carpeta.GetFiles().Where(x => (x.Name.Split("_").Last().Split(".").First() == FLXXX) || (x.Name.Split("-").Last().Split(".").First() == FLXXX)).ToList()[0];
+                                                        Cobertura_Escenario.CopyTo(Path.Combine(directorio_out, Cobertura_Escenario.Name)); //Copiamos a carpeta elegida para guardar escenario
+                                                    }
+                                                    catch
+                                                    {
+                                                        //---
+                                                    }
+                                                    
+
+                                                    FL = FL + intervalo;
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            //Lo mismo pero para el caso de una carpeta llena de archivos (no una carpeta con directorios)
+                                            int FL = Convert.ToInt32(Regex.Match(FL_init, "(\\d+)").Value);
+                                            while (FL <= Convert.ToInt32(Regex.Match(FL_fin, "(\\d+)").Value))
+                                            {
+                                                string FLXXX = "";
+                                                if (FL < 10)
+                                                    FLXXX = "FL00" + FL;
+                                                else if (FL < 100)
+                                                    FLXXX = "FL0" + FL;
+                                                else
+                                                    FLXXX = "FL" + FL;
+
+                                                try 
+                                                {
+                                                    List<FileInfo> Listado_Coberturas_Escenario = DI.GetFiles().Where(x => (x.Name.Split("_").Last().Split(".").First() == FLXXX) || (x.Name.Split("-").Last().Split(".").First() == FLXXX)).ToList();
+                                                    Listado_Coberturas_Escenario.ForEach(x => x.CopyTo(Path.Combine(directorio_out, x.Name))); //Soy buenisimo omg. Ejecuta la misma orden para todos. 
+                                                }
+                                                catch
+                                                {
+                                                    //---
+                                                }
+
+                                                FL = FL + intervalo;
+                                            }
+                                        }
+                                    }
+                                } //Preparador de ejercicios Cobertura Mínima
                             }
                         }
                         catch (FormatException e)//Detectar errores sobre el Control_A

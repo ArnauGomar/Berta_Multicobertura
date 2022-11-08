@@ -145,6 +145,33 @@ namespace Berta
             return new Cobertura(N, this.FL, "total", GEO);
         } //Union de todas las coberturas
 
+
+        /// <summary>
+        /// Ejecuta una diferencia para todas las coberturas contenidas en el conjunto (solo las que presentan intersección)
+        /// </summary>
+        /// <param name="Trama"></param>
+        public void AplicarTrama_A_Operar(Geometry Trama)
+        {
+            List<Cobertura> Intersectadas = this.A_Operar.Where(x => x.Area_Operaciones.Intersects(Trama) == true).ToList(); //Extraemos coberturas que intersectan con la trama
+            Intersectadas.ForEach(x => x.Area_Operaciones.Difference(Trama)); //Ejecutar diferencia
+            Intersectadas.ForEach(y => this.A_Operar.RemoveAt(this.A_Operar.IndexOf(this.A_Operar.Where(x => x.nombre == y.nombre).ToList()[0]))); //Eliminar coberturas antiguas de A_Operar 
+            this.A_Operar.AddRange(Intersectadas); //Añadir nuevas coberturas (modificadas)
+
+            //foreach(Cobertura Cob in Intersectadas)
+            //{
+            //    this.A_Operar.RemoveAt(this.A_Operar.IndexOf(this.A_Operar.Where(x => x.nombre == Cob.nombre).ToList()[0]));
+            //}
+
+            foreach(Cobertura cob in this.A_Operar)
+            {
+                if(cob.Area_Operaciones.Intersects(Trama) == true)
+                {
+                    if (cob.Area_Operaciones.EqualsExact(Trama, 0.1))
+                        cob.Area_Operaciones = null;
+                }
+            }
+        }
+
         /// <summary>
         /// Ejecuta las intersecciones siguiendo las combinaciones filtradas
         /// </summary>

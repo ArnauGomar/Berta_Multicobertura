@@ -1,8 +1,7 @@
 {
   "profiles": {
     "Berta": {
-      "commandName": "Project",
-      "commandLineArgs": "3,G:\\Berta - Otros\\TEST_COM\\COBERTURAS\\TestCoberturaMinima,G:\\Berta - Otros\\TEST_COM\\COBERTURAS\\TestCoberturaMinima"
+      "commandName": "Project"
     }
   }
 }
